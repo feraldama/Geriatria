@@ -15,12 +15,17 @@ import {
   formatTime,
   calculateBMI,
   parseDate,
+  getScaleDefinition,
+  computeScaleScore,
+  isValidScaleDate,
   APPOINTMENT_TYPE_LABELS,
   APPOINTMENT_STATUS_LABELS,
   PERMISSIONS,
   type TimelineEvent,
   type VitalSignInput,
   type MedicationItem,
+  type ScaleAnswers,
+  type ScaleType,
 } from "@geriatria/schemas";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -242,9 +247,26 @@ clinicalRouter.get(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
+
+      // Ordenamiento en el backend. PA ordena por sistólica.
+      const dir: "asc" | "desc" = req.query.sortDir === "desc" ? "desc" : "asc";
+      const allowed = new Set([
+        "measuredAt",
+        "systolic",
+        "heartRate",
+        "respiratoryRate",
+        "temperature",
+        "oxygenSat",
+        "weight",
+        "height",
+        "bmi",
+        "calfCircumference",
+      ]);
+      const field = allowed.has(String(req.query.sortBy)) ? String(req.query.sortBy) : "measuredAt";
+
       const vitals = await prisma.vitalSign.findMany({
         where: { patientId },
-        orderBy: { measuredAt: "desc" },
+        orderBy: { [field]: dir },
       });
       res.json({ data: vitals.map(serializeVital) });
     } catch (err) {
@@ -287,7 +309,7 @@ clinicalRouter.get(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
-      const [consultations, appointments] = await Promise.all([
+      const [consultations, appointments, scales] = await Promise.all([
         prisma.consultation.findMany({
           where: { patientId, deletedAt: null },
           orderBy: { date: "desc" },
@@ -295,6 +317,10 @@ clinicalRouter.get(
         prisma.appointment.findMany({
           where: { patientId, deletedAt: null },
           orderBy: { scheduledAt: "desc" },
+        }),
+        prisma.assessmentScale.findMany({
+          where: { patientId, deletedAt: null },
+          orderBy: { appliedAt: "desc" },
         }),
       ]);
 
@@ -313,6 +339,13 @@ clinicalRouter.get(
           title: `Cita · ${APPOINTMENT_TYPE_LABELS[a.type]}`,
           detail: a.reason,
           status: APPOINTMENT_STATUS_LABELS[a.status],
+        })),
+        ...scales.map((s) => ({
+          id: s.id,
+          type: "scale" as const,
+          date: s.appliedAt.toISOString(),
+          title: `Escala · ${getScaleDefinition(s.type)?.name ?? s.type}`,
+          detail: `${s.score}/${s.maxScore}${s.interpretation ? ` · ${s.interpretation}` : ""}`,
         })),
       ].sort((x, y) => y.date.localeCompare(x.date));
 
@@ -533,6 +566,119 @@ clinicalRouter.delete(
         req,
       });
       res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ─── Escalas de valoración geriátrica ──────────────────────────────────────
+
+function serializeScale(s: {
+  id: string;
+  type: string;
+  score: number;
+  maxScore: number;
+  appliedAt: Date;
+  interpretation: string | null;
+  notes: string | null;
+  answers?: unknown;
+}, includeAnswers = false) {
+  return {
+    id: s.id,
+    type: s.type as ScaleType,
+    score: s.score,
+    maxScore: s.maxScore,
+    appliedAt: s.appliedAt.toISOString(),
+    interpretation: s.interpretation,
+    notes: s.notes,
+    ...(includeAnswers ? { answers: (s.answers ?? {}) as ScaleAnswers } : {}),
+  };
+}
+
+// GET /:patientId/scales  → todas las escalas aplicadas (sin respuestas).
+clinicalRouter.get(
+  "/:patientId/scales",
+  requirePermission(PERMISSIONS.CLINICAL_READ),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const scales = await prisma.assessmentScale.findMany({
+        where: { patientId, deletedAt: null },
+        orderBy: { appliedAt: "desc" },
+      });
+      res.json({ data: scales.map((s) => serializeScale(s)) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /:patientId/scales/:sid  → detalle con respuestas.
+clinicalRouter.get(
+  "/:patientId/scales/:sid",
+  requirePermission(PERMISSIONS.CLINICAL_READ),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const scale = await prisma.assessmentScale.findFirst({
+        where: { id: String(req.params.sid), patientId, deletedAt: null },
+      });
+      if (!scale) throw notFound("Escala no encontrada");
+      res.json({ scale: serializeScale(scale, true) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// POST /:patientId/scales  → aplicar una escala. El puntaje se RE-CALCULA en
+// el backend a partir de las respuestas (no se confía en el cliente).
+clinicalRouter.post(
+  "/:patientId/scales",
+  requirePermission(PERMISSIONS.CLINICAL_WRITE),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const { type, date, answers, notes } = req.body ?? {};
+
+      const def = getScaleDefinition(String(type));
+      if (!def) throw badRequest("Tipo de escala desconocido");
+      if (typeof date !== "string" || !isValidScaleDate(date)) {
+        throw badRequest("Fecha inválida (dd/mm/aaaa)");
+      }
+      if (typeof answers !== "object" || answers === null) {
+        throw badRequest("Respuestas inválidas");
+      }
+
+      let score: number;
+      try {
+        score = computeScaleScore(def, answers as ScaleAnswers);
+      } catch (e) {
+        throw badRequest(e instanceof Error ? e.message : "Respuestas inválidas");
+      }
+
+      const created = await prisma.assessmentScale.create({
+        data: {
+          patientId,
+          type: def.type,
+          score,
+          maxScore: def.maxScore,
+          appliedAt: toDateTime(date),
+          answers: answers as object,
+          interpretation: def.interpret(score),
+          notes: typeof notes === "string" && notes.trim() ? notes.trim() : null,
+          createdById: req.user!.id,
+        },
+      });
+      await recordAudit({
+        userId: req.user!.id,
+        action: "scale.create",
+        resource: "scale",
+        resourceId: created.id,
+        req,
+      });
+      res.status(201).json({ scale: serializeScale(created, true) });
     } catch (err) {
       next(err);
     }

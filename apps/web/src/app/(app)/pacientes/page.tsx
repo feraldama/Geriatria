@@ -6,32 +6,95 @@ import { useRouter } from "next/navigation";
 import { Search, UserPlus, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   calculateAge,
-  formatDate,
   SEX_LABELS,
   PERMISSIONS,
+  type PatientListItem,
 } from "@geriatria/schemas";
 import { usePatients } from "@/lib/patients";
 import { useDebounce } from "@/lib/use-debounce";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { DataTable, type DataTableColumn, type SortDir } from "@/components/ui/data-table";
+import { cn } from "@/lib/utils";
 
 export default function PacientesPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ by: string; dir: SortDir }>({ by: "lastName", dir: "asc" });
   const q = useDebounce(search.trim());
-  const { data, isLoading, isError } = usePatients(q, page);
+  const { data, isLoading, isError } = usePatients(q, page, 20, sort);
   const { data: user } = useCurrentUser();
   const canWrite = hasPermission(user, PERMISSIONS.PATIENT_WRITE);
 
   const total = data?.total ?? 0;
   const pageSize = data?.pageSize ?? 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  // Enlace al detalle dentro de la celda → accesible por teclado; la fila
+  // completa también navega (afordancia de mouse) en onRowClick.
+  const nameLink = (p: PatientListItem, text: string) => (
+    <Link
+      href={`/pacientes/${p.id}`}
+      onClick={(e) => e.stopPropagation()}
+      className="hover:text-primary focus-visible:text-primary"
+    >
+      {text}
+    </Link>
+  );
+
+  const columns: DataTableColumn<PatientListItem>[] = [
+    {
+      key: "lastName",
+      header: "Apellido",
+      sortable: true,
+      cellClassName: "font-medium",
+      render: (p) => nameLink(p, p.lastName),
+    },
+    {
+      key: "firstName",
+      header: "Nombre",
+      sortable: true,
+      cellClassName: "font-medium",
+      render: (p) => nameLink(p, p.firstName),
+    },
+    {
+      key: "documentId",
+      header: "Documento",
+      sortable: true,
+      cellClassName: "tabular-nums",
+      render: (p) => p.documentId ?? "—",
+    },
+    {
+      key: "age",
+      header: "Edad",
+      sortable: true,
+      cellClassName: "tabular-nums",
+      render: (p) => `${calculateAge(p.birthDate)} años`,
+    },
+    { key: "sex", header: "Sexo", sortable: true, render: (p) => SEX_LABELS[p.sex] },
+    {
+      key: "phone",
+      header: "Teléfono",
+      sortable: true,
+      cellClassName: "tabular-nums",
+      render: (p) => p.phone ?? "—",
+    },
+    {
+      key: "alerts",
+      header: "Alertas",
+      render: (p) =>
+        p.allergyCount > 0 ? (
+          <Badge variant="destructive">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+            {p.allergyCount} {p.allergyCount === 1 ? "alergia" : "alergias"}
+          </Badge>
+        ) : null,
+    },
+  ];
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -88,51 +151,18 @@ export default function PacientesPage() {
             )}
           </div>
         ) : (
-          <Table>
-            <THead>
-              <TR>
-                <TH>Apellido y nombre</TH>
-                <TH>Documento</TH>
-                <TH>Edad</TH>
-                <TH>Sexo</TH>
-                <TH>Teléfono</TH>
-                <TH>Alertas</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {data?.data.map((p) => (
-                <TR
-                  key={p.id}
-                  className="cursor-pointer"
-                  onClick={() => router.push(`/pacientes/${p.id}`)}
-                >
-                  <TD className="font-medium">
-                    {/* Enlace real para accesibilidad/teclado; la fila entera
-                        también navega al hacer clic. */}
-                    <Link
-                      href={`/pacientes/${p.id}`}
-                      className="block hover:text-primary focus-visible:text-primary"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {p.lastName}, {p.firstName}
-                    </Link>
-                  </TD>
-                  <TD className="tabular-nums">{p.documentId ?? "—"}</TD>
-                  <TD className="tabular-nums">{calculateAge(p.birthDate)} años</TD>
-                  <TD>{SEX_LABELS[p.sex]}</TD>
-                  <TD className="tabular-nums">{p.phone ?? "—"}</TD>
-                  <TD>
-                    {p.allergyCount > 0 && (
-                      <Badge variant="destructive">
-                        <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                        {p.allergyCount} {p.allergyCount === 1 ? "alergia" : "alergias"}
-                      </Badge>
-                    )}
-                  </TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
+          <DataTable
+            columns={columns}
+            rows={data?.data ?? []}
+            rowKey={(p) => p.id}
+            sortBy={sort.by}
+            sortDir={sort.dir}
+            onSort={(by, dir) => {
+              setSort({ by, dir });
+              setPage(1);
+            }}
+            onRowClick={(p) => router.push(`/pacientes/${p.id}`)}
+          />
         )}
       </Card>
 

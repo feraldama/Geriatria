@@ -111,7 +111,7 @@ export interface ConsultationItem {
 
 // ─── Línea de tiempo ──────────────────────────────────────────────────────
 
-export type TimelineEventType = "consultation" | "appointment";
+export type TimelineEventType = "consultation" | "appointment" | "scale";
 
 export interface TimelineEvent {
   id: string;

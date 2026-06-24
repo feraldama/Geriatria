@@ -41,6 +41,7 @@ const config: Config = {
           DEFAULT: "var(--color-card)",
           foreground: "var(--color-foreground)",
         },
+        "row-hover": "var(--color-row-hover)",
       },
       fontFamily: {
         // Figtree para títulos, Noto Sans para texto (vía next/font).

@@ -30,6 +30,10 @@ Fases implementadas:
   de realización, **previsualización en el navegador** (imágenes y PDF),
   descarga y baja lógica. Almacenamiento en disco con ruta configurable
   (`STORAGE_DIR`) y capa abstraída para migrar a S3 más adelante.
+- **Fase 6** — escalas de valoración geriátrica: **Barthel, Lawton-Brody,
+  Mini-Mental (MMSE) y Yesavage (GDS-15)** como cuestionarios con **puntaje
+  automático** (re-calculado y validado en el backend), interpretación clínica
+  y **gráficos de evolución** en el tiempo. Integradas en la línea de tiempo.
 
 ## Stack
 

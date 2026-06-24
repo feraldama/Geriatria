@@ -26,6 +26,9 @@
   --color-border: #cfe9f1;
   --color-destructive: #dc2626; /* blanco 4.83:1 */
   --color-ring: #0e7490;
+  /* Fondo de fila al pasar el mouse: cian claro sólido, bien visible sobre
+     filas blancas (no depende de opacidad, que resultaba casi imperceptible). */
+  --color-row-hover: #d4eef6;
 
   /*
    * Tamaño de fuente base ajustable (preferencia del usuario, sección perfil).

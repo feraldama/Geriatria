@@ -44,6 +44,27 @@ patientsRouter.get("/", requirePermission(PERMISSIONS.PATIENT_READ), async (req,
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
 
+    // Ordenamiento (en el backend). Campos permitidos mapeados a columnas.
+    const dir: "asc" | "desc" = req.query.sortDir === "desc" ? "desc" : "asc";
+    const orderBy = ((): Prisma.PatientOrderByWithRelationInput[] => {
+      switch (req.query.sortBy) {
+        case "firstName":
+          return [{ firstName: dir }, { lastName: dir }];
+        case "documentId":
+          return [{ documentId: dir }];
+        // "Edad" ascendente = más joven primero = fecha de nacimiento descendente.
+        case "age":
+          return [{ birthDate: dir === "asc" ? "desc" : "asc" }];
+        case "sex":
+          return [{ sex: dir }];
+        case "phone":
+          return [{ phone: dir }];
+        case "lastName":
+        default:
+          return [{ lastName: dir }, { firstName: dir }];
+      }
+    })();
+
     // Búsqueda insensible a mayúsculas y acentos contra el texto normalizado.
     const where: Prisma.PatientWhereInput = {
       deletedAt: null,
@@ -55,7 +76,7 @@ patientsRouter.get("/", requirePermission(PERMISSIONS.PATIENT_READ), async (req,
       prisma.patient.findMany({
         where,
         include: { _count: { select: { allergies: true } } },
-        orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

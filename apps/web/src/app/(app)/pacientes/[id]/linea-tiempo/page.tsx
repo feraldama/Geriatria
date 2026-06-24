@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FileText, CalendarDays } from "lucide-react";
+import { FileText, CalendarDays, ClipboardList } from "lucide-react";
 import { formatDateTime, type TimelineEvent } from "@geriatria/schemas";
 import { useTimeline } from "@/lib/clinical";
 import { PatientSubHeader } from "@/components/patient-subheader";
@@ -31,14 +31,21 @@ export default function LineaTiempoPage() {
       ) : (
         <ol className="relative flex flex-col gap-4 border-l-2 border-border pl-6">
           {events.map((e: TimelineEvent) => {
-            const isConsultation = e.type === "consultation";
-            const Icon = isConsultation ? FileText : CalendarDays;
             // Fecha local (no UTC) para abrir la agenda en el día correcto.
             const dt = new Date(e.date);
             const localDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-            const href = isConsultation
-              ? `/pacientes/${id}/consultas/${e.id}`
-              : `/agenda?view=dia&date=${localDate}`;
+            const Icon =
+              e.type === "consultation"
+                ? FileText
+                : e.type === "scale"
+                  ? ClipboardList
+                  : CalendarDays;
+            const href =
+              e.type === "consultation"
+                ? `/pacientes/${id}/consultas/${e.id}`
+                : e.type === "scale"
+                  ? `/pacientes/${id}/escalas/${e.id}`
+                  : `/agenda?view=dia&date=${localDate}`;
             return (
               <li key={`${e.type}-${e.id}`} className="relative">
                 {/* Punto en la línea */}

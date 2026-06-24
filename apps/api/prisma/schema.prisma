@@ -229,6 +229,7 @@ model Patient {
   vitalSigns    VitalSign[]
   medications   Medication[]
   documents     Document[]
+  scales        AssessmentScale[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -454,6 +455,34 @@ model Document {
 
   @@index([patientId])
   @@index([category])
+  @@index([deletedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Escalas de valoración geriátrica (Fase 6)
+// ─────────────────────────────────────────────────────────────────────────
+
+model AssessmentScale {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  type           String // BARTHEL, LAWTON, MMSE, YESAVAGE, ... (sin enum: extensible)
+  score          Int
+  maxScore       Int
+  appliedAt      DateTime @default(now())
+  answers        Json // respuestas individuales { questionId: value }
+  interpretation String?
+  notes          String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+
+  @@index([patientId])
+  @@index([type])
   @@index([deletedAt])
 }
 

@@ -63,10 +63,17 @@ export function useUpdateConsultation(patientId: string, cid: string) {
   });
 }
 
-export function useVitals(patientId: string) {
+export function useVitals(patientId: string, sort?: { by: string; dir: "asc" | "desc" }) {
+  const params = new URLSearchParams();
+  if (sort) {
+    params.set("sortBy", sort.by);
+    params.set("sortDir", sort.dir);
+  }
+  const qs = params.toString();
   return useQuery({
-    queryKey: ["vitals", patientId],
-    queryFn: () => api.get<{ data: VitalSignItem[] }>(`/patients/${patientId}/vitals`),
+    queryKey: ["vitals", patientId, sort],
+    queryFn: () =>
+      api.get<{ data: VitalSignItem[] }>(`/patients/${patientId}/vitals${qs ? `?${qs}` : ""}`),
     select: (d) => d.data,
     enabled: !!patientId,
   });

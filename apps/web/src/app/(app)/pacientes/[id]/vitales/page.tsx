@@ -11,23 +11,40 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { VitalsForm } from "@/components/vitals-form";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-
-// Celda numérica; "—" si no hay dato.
-function Cell({ value }: { value: number | string | null }) {
-  return <TD className="tabular-nums">{value ?? "—"}</TD>;
-}
+import { DataTable, type DataTableColumn, type SortDir } from "@/components/ui/data-table";
 
 function pa(v: VitalSignItem) {
-  return v.systolic && v.diastolic ? `${v.systolic}/${v.diastolic}` : null;
+  return v.systolic && v.diastolic ? `${v.systolic}/${v.diastolic}` : "—";
 }
+
+const num = (value: number | null) => value ?? "—";
 
 export default function VitalesPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: vitals, isLoading, isError } = useVitals(id);
+  const [sort, setSort] = useState<{ by: string; dir: SortDir }>({ by: "measuredAt", dir: "desc" });
+  const { data: vitals, isLoading, isError } = useVitals(id, sort);
   const { data: user } = useCurrentUser();
   const canWrite = hasPermission(user, PERMISSIONS.CLINICAL_WRITE);
   const [open, setOpen] = useState(false);
+
+  const columns: DataTableColumn<VitalSignItem>[] = [
+    {
+      key: "measuredAt",
+      header: "Fecha",
+      sortable: true,
+      cellClassName: "whitespace-nowrap",
+      render: (v) => formatDateTime(v.measuredAt),
+    },
+    { key: "systolic", header: "PA", sortable: true, align: "right", render: (v) => pa(v) },
+    { key: "heartRate", header: "FC", sortable: true, align: "right", render: (v) => num(v.heartRate) },
+    { key: "respiratoryRate", header: "FR", sortable: true, align: "right", render: (v) => num(v.respiratoryRate) },
+    { key: "temperature", header: "Tº", sortable: true, align: "right", render: (v) => num(v.temperature) },
+    { key: "oxygenSat", header: "SatO₂", sortable: true, align: "right", render: (v) => num(v.oxygenSat) },
+    { key: "weight", header: "Peso", sortable: true, align: "right", render: (v) => num(v.weight) },
+    { key: "height", header: "Talla", sortable: true, align: "right", render: (v) => num(v.height) },
+    { key: "bmi", header: "IMC", sortable: true, align: "right", render: (v) => num(v.bmi) },
+    { key: "calfCircumference", header: "C. pant.", sortable: true, align: "right", render: (v) => num(v.calfCircumference) },
+  ];
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -55,38 +72,14 @@ export default function VitalesPage() {
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <Table>
-            <THead>
-              <TR>
-                <TH>Fecha</TH>
-                <TH>PA</TH>
-                <TH>FC</TH>
-                <TH>FR</TH>
-                <TH>Tº</TH>
-                <TH>SatO₂</TH>
-                <TH>Peso</TH>
-                <TH>Talla</TH>
-                <TH>IMC</TH>
-                <TH>C. pant.</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {vitals.map((v) => (
-                <TR key={v.id}>
-                  <TD className="whitespace-nowrap">{formatDateTime(v.measuredAt)}</TD>
-                  <Cell value={pa(v)} />
-                  <Cell value={v.heartRate} />
-                  <Cell value={v.respiratoryRate} />
-                  <Cell value={v.temperature} />
-                  <Cell value={v.oxygenSat} />
-                  <Cell value={v.weight} />
-                  <Cell value={v.height} />
-                  <Cell value={v.bmi} />
-                  <Cell value={v.calfCircumference} />
-                </TR>
-              ))}
-            </TBody>
-          </Table>
+          <DataTable
+            columns={columns}
+            rows={vitals}
+            rowKey={(v) => v.id}
+            sortBy={sort.by}
+            sortDir={sort.dir}
+            onSort={(by, dir) => setSort({ by, dir })}
+          />
         </Card>
       )}
 

@@ -15,12 +15,21 @@ interface PatientResponse {
   patient: PatientDetail;
 }
 
-export function usePatients(q: string, page: number, pageSize = 20) {
+export function usePatients(
+  q: string,
+  page: number,
+  pageSize = 20,
+  sort?: { by: string; dir: "asc" | "desc" },
+) {
   const params = new URLSearchParams({ q, page: String(page), pageSize: String(pageSize) });
+  if (sort) {
+    params.set("sortBy", sort.by);
+    params.set("sortDir", sort.dir);
+  }
   return useQuery({
-    queryKey: ["patients", { q, page, pageSize }],
+    queryKey: ["patients", { q, page, pageSize, sort }],
     queryFn: () => api.get<Paginated<PatientListItem>>(`/patients?${params.toString()}`),
-    placeholderData: keepPreviousData, // evita parpadeo al paginar/buscar
+    placeholderData: keepPreviousData, // evita parpadeo al paginar/buscar/ordenar
   });
 }
 
