@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Tokens del design system (skill ui-ux-pro-max — "Accessible & Ethical").
+ * Paleta: cian salud + verde. Pensada para alto contraste y legibilidad,
+ * apropiada para usuarios adultos mayores.
+ */
+:root {
+  --color-primary: #0891b2;
+  --color-on-primary: #ffffff;
+  --color-secondary: #22d3ee;
+  --color-accent: #059669;
+  --color-background: #f3fbfd; /* cian muy suave para no cansar la vista */
+  --color-foreground: #134e5a;
+  --color-card: #ffffff;
+  --color-muted: #e8f1f6;
+  --color-muted-foreground: #4b6b75;
+  --color-border: #cfe9f1;
+  --color-destructive: #dc2626;
+  --color-ring: #0891b2;
+
+  /*
+   * Tamaño de fuente base ajustable (preferencia del usuario, sección perfil).
+   * Se sobreescribe con [data-font-size]. Base 16px = accesible por defecto.
+   */
+  --base-font-size: 16px;
+}
+
+html[data-font-size="sm"] {
+  --base-font-size: 15px;
+}
+html[data-font-size="md"] {
+  --base-font-size: 16px;
+}
+html[data-font-size="lg"] {
+  --base-font-size: 18px;
+}
+html[data-font-size="xl"] {
+  --base-font-size: 20px;
+}
+
+html {
+  font-size: var(--base-font-size);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-heading;
+  }
+  /* Foco visible y consistente para navegación por teclado (accesibilidad). */
+  :focus-visible {
+    @apply outline-none ring-[3px] ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+/* Respetar la preferencia de movimiento reducido del sistema. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

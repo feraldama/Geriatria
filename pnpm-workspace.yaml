@@ -1,0 +1,13 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm bloquea por defecto los scripts de instalación de dependencias.
+# Habilitamos solo los necesarios: Prisma (genera su cliente/engine) y esbuild
+# (binario usado por tsx/tsup/vitest). unrs-resolver lo usa eslint.
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
+  unrs-resolver: true

@@ -1,0 +1,15 @@
+{
+  "name": "@geriatria/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "tsconfig.base.json",
+    "eslint.base.mjs"
+  ],
+  "main": "eslint.base.mjs",
+  "peerDependencies": {
+    "@eslint/js": "*",
+    "typescript-eslint": "*"
+  }
+}

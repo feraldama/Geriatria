@@ -1,0 +1,52 @@
+# ─── Dependencias ───────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+
+# ─── Builds / artefactos generados ──────────────────────────────────────────
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+.turbo/
+
+# Next.js: archivo de tipos autogenerado (se regenera con `next dev`/`build`)
+next-env.d.ts
+
+# ─── Entornos y secretos (NUNCA versionar) ──────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+
+# ─── Prisma ──────────────────────────────────────────────────────────────────
+apps/api/prisma/*.db
+
+# ─── Archivos subidos por usuarios (documentos clínicos) ─────────────────────
+apps/api/storage/
+uploads/
+
+# ─── Tests / cobertura ───────────────────────────────────────────────────────
+coverage/
+.vitest/
+
+# ─── Logs ──────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Herramientas / skills (reinstalables, no necesarias en el repo) ─────────
+# La skill ui-ux-pro-max (~8.5MB de scripts y CSV) se reinstala desde su repo.
+# El design system PERSISTIDO vive en apps/web/design-system/ y sí se versiona.
+.claude/skills/
+.claude/settings.local.json
+
+# ─── Sistema operativo / editor ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json

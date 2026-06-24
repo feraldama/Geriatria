@@ -1,0 +1,25 @@
+{
+  "name": "sistema-geriatria",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de gestión clínica para geriatría (monorepo)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel -r run dev",
+    "dev:api": "pnpm --filter @geriatria/api run dev",
+    "dev:web": "pnpm --filter @geriatria/web run dev",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "db:migrate": "pnpm --filter @geriatria/api run db:migrate",
+    "db:seed": "pnpm --filter @geriatria/api run db:seed",
+    "db:studio": "pnpm --filter @geriatria/api run db:studio"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  },
+  "packageManager": "pnpm@11.8.0"
+}

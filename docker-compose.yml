@@ -1,0 +1,43 @@
+# Docker Compose para levantar Postgres + Adminer en desarrollo.
+#
+# NOTA: en este entorno ya existe un PostgreSQL local (18.4) en localhost:5432,
+# por lo que NO es necesario usar Docker. Este archivo queda disponible para
+# quien prefiera levantar la base en un contenedor o reproducir el entorno en
+# otra máquina. Si usás el Postgres local, omití `docker compose up` y apuntá
+# DATABASE_URL al servidor existente (ver README).
+#
+# En producción, la infraestructura (Postgres, TLS/HTTPS, respaldos) la
+# administra el operador del servidor; esta app solo consume DATABASE_URL.
+
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: geriatria-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-geriatria}
+    ports:
+      # Se expone en 5433 para no chocar con un Postgres local en 5432.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - geriatria_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  adminer:
+    image: adminer:latest
+    container_name: geriatria-adminer
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+
+volumes:
+  geriatria_pgdata:

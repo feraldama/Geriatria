@@ -1,0 +1,11 @@
+{
+  "extends": "@geriatria/config/tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "rootDir": ".",
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src", "prisma", "vitest.config.ts"]
+}

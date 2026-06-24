@@ -1,0 +1,118 @@
+// Esquema de base de datos (Prisma + PostgreSQL).
+//
+// Fase 0: modelos de autenticación y RBAC (User, Role, Permission) + AuditLog.
+// Los modelos clínicos (Patient, Consultation, etc.) se agregan en fases
+// siguientes. Todos los registros llevan createdAt/updatedAt/deletedAt
+// (borrado lógico) y createdById donde aplica.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// RBAC: usuarios, roles y permisos
+// ─────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  photoUrl     String?
+  active       Boolean   @default(true)
+  // Preferencias de interfaz (tamaño de fuente, etc.) como JSON flexible.
+  preferences  Json      @default("{}")
+
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  // Protección contra fuerza bruta: contador de intentos fallidos y bloqueo.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  createdById String?
+  createdBy   User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
+  createdUsers User[] @relation("UserCreatedBy")
+
+  auditLogs AuditLog[]
+
+  @@index([email])
+  @@index([deletedAt])
+}
+
+model Role {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  // Roles base del sistema (no se pueden borrar; sí editar permisos).
+  isSystem    Boolean @default(false)
+
+  permissions RolePermission[]
+  users       User[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  // Acción en formato `recurso:acción`, ej. "patient:read".
+  action      String  @unique
+  description String
+
+  roles RolePermission[]
+
+  createdAt DateTime @default(now())
+}
+
+// Tabla puente N–N entre Role y Permission (permisos editables sin tocar código).
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Auditoría
+// ─────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  // Quién (puede ser null en intentos de login con email inexistente).
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  // Qué pasó: acción + recurso afectado.
+  action   String // ej. "login.success", "login.failed", "user.update"
+  resource String? // ej. "patient", "user"
+  resourceId String?
+
+  // Contexto adicional (cambios, email intentado, etc.) como JSON.
+  metadata Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
