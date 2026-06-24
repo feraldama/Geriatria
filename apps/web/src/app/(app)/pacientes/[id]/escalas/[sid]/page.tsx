@@ -7,6 +7,7 @@ import { formatDate, getScaleDefinition } from "@geriatria/schemas";
 import { useScale } from "@/lib/scales";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { LEVEL_BADGE } from "@/lib/scale-ui";
 
 export default function EscalaDetallePage() {
   const { id, sid } = useParams<{ id: string; sid: string }>();
@@ -51,7 +52,11 @@ export default function EscalaDetallePage() {
             {scale.score}
             <span className="text-lg font-normal text-muted-foreground"> / {scale.maxScore}</span>
           </span>
-          {scale.interpretation && <Badge variant="primary">{scale.interpretation}</Badge>}
+          {scale.interpretation && (
+            <Badge variant={def ? LEVEL_BADGE[def.interpret(scale.score).level] : "primary"}>
+              {scale.interpretation}
+            </Badge>
+          )}
         </CardContent>
       </Card>
 

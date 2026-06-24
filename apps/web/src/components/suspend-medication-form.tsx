@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ui/field";
 import { DateInput } from "@/components/ui/date-input";
 import { ErrorAlert } from "@/components/ui/alert";
+import { scrollToFirstError } from "@/lib/scroll-to-error";
 
 interface FormValues {
   suspendedReason: string;
@@ -43,6 +44,7 @@ export function SuspendMedicationForm({
   } = useForm<FormValues>({
     resolver: zodResolver(suspendMedicationSchema) as unknown as Resolver<FormValues>,
     mode: "onTouched",
+    shouldFocusError: false,
     defaultValues: { suspendedReason: "", suspendedDate: formatDate(new Date()) },
   });
 
@@ -54,7 +56,7 @@ export function SuspendMedicationForm({
     } catch {
       /* error abajo */
     }
-  });
+  }, () => scrollToFirstError());
 
   const serverError =
     suspend.error instanceof ApiError

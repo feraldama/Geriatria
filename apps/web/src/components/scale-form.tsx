@@ -12,11 +12,15 @@ import { useApplyScale } from "@/lib/scales";
 import { ApiError } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ui/field";
 import { DateInput } from "@/components/ui/date-input";
+import { Badge } from "@/components/ui/badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LEVEL_BADGE } from "@/lib/scale-ui";
+import { scrollToFirstError } from "@/lib/scroll-to-error";
 import { cn } from "@/lib/utils";
 
 export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDefinition }) {
@@ -33,14 +37,24 @@ export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDef
   const complete = answeredCount === def.questions.length;
   const partialScore = Object.values(answers).reduce((a, b) => a + b, 0);
 
-  function setAnswer(qid: string, value: number) {
-    setAnswers((prev) => ({ ...prev, [qid]: value }));
+  function setAnswer(qid: string, value: number | undefined) {
+    setAnswers((prev) => {
+      if (value === undefined) {
+        const next = { ...prev };
+        delete next[qid];
+        return next;
+      }
+      return { ...prev, [qid]: value };
+    });
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setShowErrors(true);
-    if (!complete || !isValidDateString(date)) return;
+    if (!complete || !isValidDateString(date)) {
+      scrollToFirstError();
+      return;
+    }
     try {
       const res = await apply.mutateAsync({
         type: def.type,
@@ -100,7 +114,11 @@ export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDef
             const value = answers[q.id];
             const missing = showErrors && value === undefined;
             return (
-              <fieldset key={q.id} className={cn("flex flex-col gap-2", missing && "rounded-md")}>
+              <fieldset
+                key={q.id}
+                data-field-error={missing ? "true" : undefined}
+                className="flex flex-col gap-2"
+              >
                 <legend className="mb-1 font-medium">
                   {idx + 1}. {q.text}
                   {q.kind === "range" && (
@@ -132,8 +150,8 @@ export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDef
                       </label>
                     ))}
                   </div>
-                ) : (
-                  // Rango: botones 0..max para elegir los puntos de la sección.
+                ) : q.kind === "range" && q.max <= 10 ? (
+                  // Rango chico: botones 0..max para elegir los puntos.
                   <div className="flex flex-wrap gap-1.5">
                     {Array.from({ length: q.max + 1 }, (_, n) => (
                       <button
@@ -151,6 +169,29 @@ export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDef
                         {n}
                       </button>
                     ))}
+                  </div>
+                ) : (
+                  // Rango grande o número (p. ej. tiempo del TUG): input numérico.
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={q.kind === "number" ? q.min : 0}
+                      max={q.max}
+                      step={q.kind === "number" ? (q.step ?? 1) : 1}
+                      className="max-w-40"
+                      value={value ?? ""}
+                      aria-invalid={missing}
+                      onChange={(e) =>
+                        setAnswer(q.id, e.target.value === "" ? undefined : Number(e.target.value))
+                      }
+                    />
+                    {q.kind === "number" && q.unit && (
+                      <span className="text-muted-foreground">{q.unit}</span>
+                    )}
+                    {q.kind === "range" && (
+                      <span className="text-muted-foreground">/ {q.max}</span>
+                    )}
                   </div>
                 )}
                 {missing && <p className="text-sm text-destructive">Seleccioná una opción.</p>}
@@ -176,11 +217,15 @@ export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDef
             {partialScore}
             <span className="text-base font-normal text-muted-foreground"> / {def.maxScore}</span>
           </span>
-          <span className="ml-3 text-sm text-muted-foreground">
-            {complete
-              ? def.interpret(partialScore)
-              : `${answeredCount}/${def.questions.length} ítems respondidos`}
-          </span>
+          {complete ? (
+            <Badge variant={LEVEL_BADGE[def.interpret(partialScore).level]} className="ml-3">
+              {def.interpret(partialScore).label}
+            </Badge>
+          ) : (
+            <span className="ml-3 text-sm text-muted-foreground">
+              {answeredCount}/{def.questions.length} ítems respondidos
+            </span>
+          )}
         </div>
         <div className="flex gap-3">
           <Button

@@ -28,6 +28,7 @@ import { Field } from "@/components/ui/field";
 import { DateInput } from "@/components/ui/date-input";
 import { TimeInput } from "@/components/ui/time-input";
 import { ErrorAlert } from "@/components/ui/alert";
+import { scrollToFirstError } from "@/lib/scroll-to-error";
 
 interface FormValues {
   patientId: string;
@@ -64,6 +65,7 @@ export function AppointmentForm({ initial, defaultDate, onSuccess, onCancel }: A
   } = useForm<FormValues>({
     resolver: zodResolver(createAppointmentSchema) as unknown as Resolver<FormValues>,
     mode: "onTouched",
+    shouldFocusError: false,
     defaultValues: initial
       ? {
           patientId: initial.patientId,
@@ -103,7 +105,7 @@ export function AppointmentForm({ initial, defaultDate, onSuccess, onCancel }: A
     } catch {
       /* el error se muestra abajo */
     }
-  });
+  }, () => scrollToFirstError());
 
   const mutation = isEdit ? update : create;
   const serverError =

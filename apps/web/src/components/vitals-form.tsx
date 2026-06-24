@@ -18,6 +18,7 @@ import { Field } from "@/components/ui/field";
 import { DateInput } from "@/components/ui/date-input";
 import { TimeInput } from "@/components/ui/time-input";
 import { ErrorAlert } from "@/components/ui/alert";
+import { scrollToFirstError } from "@/lib/scroll-to-error";
 
 interface FormValues {
   date: string;
@@ -56,6 +57,7 @@ export function VitalsForm({
   } = useForm<FormValues>({
     resolver: zodResolver(vitalSignSchema) as unknown as Resolver<FormValues>,
     mode: "onTouched",
+    shouldFocusError: false,
     defaultValues: {
       date: formatDate(now),
       time: formatTime(now),
@@ -82,7 +84,7 @@ export function VitalsForm({
     } catch {
       /* error abajo */
     }
-  });
+  }, () => scrollToFirstError());
 
   const serverError =
     create.error instanceof ApiError

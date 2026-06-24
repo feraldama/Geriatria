@@ -28,6 +28,7 @@ import { DateInput } from "@/components/ui/date-input";
 import { CheckboxField } from "@/components/ui/checkbox";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { scrollToFirstError } from "@/lib/scroll-to-error";
 
 // Valores del formulario: todo string/boolean; los selects opcionales usan "".
 // La validación/transformación final la hace Zod (mismo esquema que el backend).
@@ -178,6 +179,7 @@ export function PatientForm({
     resolver: zodResolver(createPatientSchema) as unknown as Resolver<FormValues>,
     defaultValues: initial ? fromDetail(initial) : emptyValues(),
     mode: "onTouched", // validación al salir del campo (no en cada tecla)
+    shouldFocusError: false, // el foco/scroll suave lo maneja scrollToFirstError
   });
 
   const caregivers = useFieldArray({ control, name: "caregivers" });
@@ -187,7 +189,10 @@ export function PatientForm({
   const hasErrors = Object.keys(errors).length > 0;
 
   // Zod ya transformó los datos al validar; los pasamos tal cual al backend.
-  const submit = handleSubmit((data) => onSubmit(data as unknown as CreatePatientInput));
+  const submit = handleSubmit(
+    (data) => onSubmit(data as unknown as CreatePatientInput),
+    () => scrollToFirstError(),
+  );
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-6" noValidate>

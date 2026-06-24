@@ -666,7 +666,7 @@ clinicalRouter.post(
           maxScore: def.maxScore,
           appliedAt: toDateTime(date),
           answers: answers as object,
-          interpretation: def.interpret(score),
+          interpretation: def.interpret(score).label,
           notes: typeof notes === "string" && notes.trim() ? notes.trim() : null,
           createdById: req.user!.id,
         },

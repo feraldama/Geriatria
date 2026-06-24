@@ -19,6 +19,7 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { DateInput } from "@/components/ui/date-input";
 import { ErrorAlert } from "@/components/ui/alert";
+import { scrollToFirstError } from "@/lib/scroll-to-error";
 
 const ACCEPT = ".pdf,image/png,image/jpeg,image/webp,image/gif,.dcm,application/dicom";
 
@@ -55,7 +56,10 @@ export function DocumentUploadForm({
     if (!title.trim()) errs.title = "El título es obligatorio";
     if (studyDate && !isValidDateString(studyDate)) errs.studyDate = "Fecha inválida (dd/mm/aaaa)";
     setErrors(errs);
-    if (Object.keys(errs).length > 0 || !file) return;
+    if (Object.keys(errs).length > 0 || !file) {
+      scrollToFirstError();
+      return;
+    }
 
     const fd = new FormData();
     fd.append("file", file);

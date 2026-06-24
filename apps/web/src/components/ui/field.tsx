@@ -20,7 +20,8 @@ export function Field({ label, htmlFor, error, hint, required, className, childr
   const hintId = hint && htmlFor ? `${htmlFor}-hint` : undefined;
   const errorId = error && htmlFor ? `${htmlFor}-error` : undefined;
   return (
-    <div className={className}>
+    // data-field-error marca el campo inválido para el scroll suave al enviar.
+    <div className={className} data-field-error={error ? "true" : undefined}>
       <Label htmlFor={htmlFor} className="mb-1.5 block">
         {label}
         {required && (

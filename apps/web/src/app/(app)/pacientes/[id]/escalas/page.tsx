@@ -6,9 +6,11 @@ import { Plus, LineChart as LineChartIcon } from "lucide-react";
 import {
   formatDate,
   SCALE_TYPES,
+  SCALE_CATEGORIES,
   SCALE_DEFINITIONS,
   PERMISSIONS,
   type AssessmentScaleItem,
+  type ScaleType,
 } from "@geriatria/schemas";
 import { useScales } from "@/lib/scales";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
@@ -17,6 +19,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LineChart } from "@/components/ui/line-chart";
+import { LEVEL_BADGE } from "@/lib/scale-ui";
 import { cn } from "@/lib/utils";
 
 export default function EscalasPage() {
@@ -47,18 +50,27 @@ export default function EscalasPage() {
       ) : isLoading ? (
         <p className="p-8 text-center text-muted-foreground">Cargando…</p>
       ) : (
-        <div className="flex flex-col gap-5">
-          {SCALE_TYPES.map((type) => {
-            const def = SCALE_DEFINITIONS[type];
-            // Registros de esta escala (la lista viene desc; para el gráfico
-            // los ordenamos ascendente por fecha).
-            const records = byType[type] ?? [];
-            const asc = [...records].sort((a, b) => a.appliedAt.localeCompare(b.appliedAt));
-            const latest = records[0]; // más reciente
-            const points = asc.map((s) => ({ date: s.appliedAt, value: s.score }));
-
+        <div className="flex flex-col gap-8">
+          {SCALE_CATEGORIES.map((category) => {
+            const typesInCategory = SCALE_TYPES.filter(
+              (t) => SCALE_DEFINITIONS[t].category === category,
+            );
             return (
-              <Card key={type}>
+              <section key={category} className="flex flex-col gap-3">
+                <h3 className="font-heading text-lg font-semibold text-muted-foreground">
+                  {category}
+                </h3>
+                {typesInCategory.map((type: ScaleType) => {
+                  const def = SCALE_DEFINITIONS[type];
+                  // Registros de esta escala (la lista viene desc; para el gráfico
+                  // los ordenamos ascendente por fecha).
+                  const records = byType[type] ?? [];
+                  const asc = [...records].sort((a, b) => a.appliedAt.localeCompare(b.appliedAt));
+                  const latest = records[0]; // más reciente
+                  const points = asc.map((s) => ({ date: s.appliedAt, value: s.score }));
+
+                  return (
+                    <Card key={type}>
                 <CardHeader className="flex-row items-start justify-between gap-4">
                   <div>
                     <CardTitle>{def.name}</CardTitle>
@@ -87,7 +99,11 @@ export default function EscalasPage() {
                             / {latest.maxScore}
                           </span>
                         </span>
-                        {latest.interpretation && <Badge variant="primary">{latest.interpretation}</Badge>}
+                        {latest.interpretation && (
+                          <Badge variant={LEVEL_BADGE[def.interpret(latest.score).level]}>
+                            {latest.interpretation}
+                          </Badge>
+                        )}
                         <span className="text-sm text-muted-foreground">
                           Último: {formatDate(latest.appliedAt)}
                         </span>
@@ -125,8 +141,11 @@ export default function EscalasPage() {
                       </ul>
                     </>
                   )}
-                </CardContent>
-              </Card>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </section>
             );
           })}
         </div>

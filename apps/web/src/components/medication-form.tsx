@@ -21,6 +21,7 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { DateInput } from "@/components/ui/date-input";
 import { ErrorAlert } from "@/components/ui/alert";
+import { scrollToFirstError } from "@/lib/scroll-to-error";
 
 interface FormValues {
   drug: string;
@@ -55,6 +56,7 @@ export function MedicationForm({ patientId, initial, onSuccess, onCancel }: Medi
   } = useForm<FormValues>({
     resolver: zodResolver(createMedicationSchema) as unknown as Resolver<FormValues>,
     mode: "onTouched",
+    shouldFocusError: false,
     defaultValues: initial
       ? {
           drug: initial.drug,
@@ -92,7 +94,7 @@ export function MedicationForm({ patientId, initial, onSuccess, onCancel }: Medi
     } catch {
       /* error abajo */
     }
-  });
+  }, () => scrollToFirstError());
 
   const serverError =
     mutation.error instanceof ApiError

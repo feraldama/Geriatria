@@ -22,6 +22,7 @@ import { DateInput } from "@/components/ui/date-input";
 import { TimeInput } from "@/components/ui/time-input";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { scrollToFirstError } from "@/lib/scroll-to-error";
 
 interface VitalsValues {
   systolic: string;
@@ -80,6 +81,7 @@ export function ConsultationForm({ patientId, appointmentId, initial }: Consulta
   } = useForm<FormValues>({
     resolver: zodResolver(consultationSchema) as unknown as Resolver<FormValues>,
     mode: "onTouched",
+    shouldFocusError: false,
     defaultValues: initial
       ? {
           date: formatDate(initial.date),
@@ -128,7 +130,7 @@ export function ConsultationForm({ patientId, appointmentId, initial }: Consulta
     } catch {
       /* error abajo */
     }
-  });
+  }, () => scrollToFirstError());
 
   const serverError =
     mutation.error instanceof ApiError

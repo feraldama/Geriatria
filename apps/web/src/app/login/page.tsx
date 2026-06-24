@@ -8,6 +8,7 @@ import { loginSchema, type LoginInput } from "@geriatria/schemas";
 import { Stethoscope, Eye, EyeOff } from "lucide-react";
 import { useLogin } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
+import { scrollToFirstError } from "@/lib/scroll-to-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +24,11 @@ export default function LoginPage() {
     handleSubmit,
     setFocus,
     formState: { errors },
-  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema), mode: "onTouched" });
+  } = useForm<LoginInput>({
+    resolver: zodResolver(loginSchema),
+    mode: "onTouched",
+    shouldFocusError: false,
+  });
 
   async function onSubmit(values: LoginInput) {
     try {
@@ -55,7 +60,11 @@ export default function LoginPage() {
           <CardDescription>Ingresá con tu cuenta para continuar</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+          <form
+            onSubmit={handleSubmit(onSubmit, () => scrollToFirstError())}
+            className="flex flex-col gap-4"
+            noValidate
+          >
             {serverError && <ErrorAlert message={serverError} />}
 
             <div className="flex flex-col gap-1.5">

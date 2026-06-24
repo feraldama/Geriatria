@@ -30,10 +30,12 @@ Fases implementadas:
   de realización, **previsualización en el navegador** (imágenes y PDF),
   descarga y baja lógica. Almacenamiento en disco con ruta configurable
   (`STORAGE_DIR`) y capa abstraída para migrar a S3 más adelante.
-- **Fase 6** — escalas de valoración geriátrica: **Barthel, Lawton-Brody,
-  Mini-Mental (MMSE) y Yesavage (GDS-15)** como cuestionarios con **puntaje
-  automático** (re-calculado y validado en el backend), interpretación clínica
-  y **gráficos de evolución** en el tiempo. Integradas en la línea de tiempo.
+- **Fase 6** — escalas de valoración geriátrica (16 escalas): Barthel, Katz,
+  Lawton-Brody, MMSE, MoCA, Test del reloj, Pfeiffer, Yesavage (GDS-15), Fried,
+  FRAIL, Timed Up & Go, Tinetti, MNA, Charlson, Braden y Norton. Cuestionarios
+  con **puntaje automático** (re-calculado y validado en el backend),
+  **interpretación con color por nivel** (verde/ámbar/rojo) y **gráficos de
+  evolución**. Agrupadas por categoría e integradas en la línea de tiempo.
 
 ## Stack
 

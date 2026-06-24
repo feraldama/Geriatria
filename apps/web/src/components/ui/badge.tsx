@@ -12,6 +12,7 @@ const badgeVariants = cva(
         accent: "bg-accent/10 text-accent",
         // Alergias y avisos críticos: siempre en rojo.
         destructive: "bg-destructive/10 text-destructive",
+        warning: "bg-amber-100 text-amber-800",
         outline: "border border-border text-foreground",
       },
     },
