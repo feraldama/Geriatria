@@ -40,6 +40,50 @@ export function parseDate(input: string): Date | null {
   return isValid(parsed) ? parsed : null;
 }
 
+/** Patrón de fecha `dd/mm/aaaa` (validación rápida de formato). */
+export const DATE_PATTERN = /^\d{2}\/\d{2}\/\d{4}$/;
+
+/** ¿El string es una fecha `dd/mm/aaaa` válida y real (no 31/02)? */
+export function isValidDateString(input: string): boolean {
+  if (!DATE_PATTERN.test(input.trim())) return false;
+  return parseDate(input) !== null;
+}
+
+/** Convierte un string `dd/mm/aaaa` a ISO (UTC) para enviar al backend. */
+export function dateStringToISO(input: string): string | null {
+  const d = parseDate(input);
+  return d ? d.toISOString() : null;
+}
+
+/** Patrón de hora `HH:mm` (24h). */
+export const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** ¿El string es una hora `HH:mm` válida (24h)? */
+export function isValidTimeString(input: string): boolean {
+  return TIME_PATTERN.test(input.trim());
+}
+
+/** Formatea solo la hora `HH:mm` (24h) de una fecha. */
+export function formatTime(value: Date | string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (!isValid(date)) return "";
+  return format(date, "HH:mm", { locale: es });
+}
+
+/**
+ * Combina una fecha `dd/mm/aaaa` y una hora `HH:mm` en un Date (hora local).
+ * Devuelve null si alguno es inválido.
+ */
+export function combineDateTime(dateStr: string, timeStr: string): Date | null {
+  if (!isValidTimeString(timeStr)) return null;
+  const base = parseDate(dateStr);
+  if (!base) return null;
+  const parts = timeStr.split(":");
+  base.setHours(Number(parts[0]), Number(parts[1]), 0, 0);
+  return base;
+}
+
 /** Calcula la edad en años a partir de la fecha de nacimiento. */
 export function calculateAge(birthDate: Date | string, reference: Date = new Date()): number {
   const birth = birthDate instanceof Date ? birthDate : new Date(birthDate);

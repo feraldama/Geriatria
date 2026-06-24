@@ -44,6 +44,9 @@ model User {
   createdBy   User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
   createdUsers User[] @relation("UserCreatedBy")
 
+  createdPatients     Patient[]     @relation("PatientCreatedBy")
+  createdAppointments Appointment[] @relation("AppointmentCreatedBy")
+
   auditLogs AuditLog[]
 
   @@index([email])
@@ -86,6 +89,372 @@ model RolePermission {
 
   @@id([roleId, permissionId])
   @@index([permissionId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Pacientes (Fase 1)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum Sex {
+  MASCULINO
+  FEMENINO
+  OTRO
+}
+
+enum MaritalStatus {
+  SOLTERO
+  CASADO
+  VIUDO
+  DIVORCIADO
+  UNION_LIBRE
+  OTRO
+}
+
+// Nivel de dependencia para actividades de la vida diaria.
+enum DependencyLevel {
+  INDEPENDIENTE
+  LEVE
+  MODERADA
+  SEVERA
+  TOTAL
+}
+
+// Estado de un hábito (tabaco / alcohol).
+enum HabitStatus {
+  NUNCA
+  EX
+  ACTIVO
+}
+
+enum AllergySeverity {
+  LEVE
+  MODERADA
+  SEVERA
+}
+
+enum AppointmentType {
+  PRIMERA_VEZ
+  CONTROL
+  DOMICILIARIA
+  TELECONSULTA
+}
+
+enum MedicationRoute {
+  ORAL
+  SUBLINGUAL
+  INTRAVENOSA
+  INTRAMUSCULAR
+  SUBCUTANEA
+  TOPICA
+  INHALATORIA
+  OFTALMICA
+  OTICA
+  RECTAL
+  OTRA
+}
+
+enum MedicationStatus {
+  ACTIVA
+  SUSPENDIDA
+}
+
+enum DocumentCategory {
+  LABORATORIO
+  IMAGEN
+  INTERCONSULTA
+  ELECTROCARDIOGRAMA
+  OTRO
+}
+
+enum AppointmentStatus {
+  PROGRAMADA
+  CONFIRMADA
+  ATENDIDA
+  AUSENTE
+  CANCELADA
+}
+
+model Patient {
+  id String @id @default(cuid())
+
+  // Datos personales
+  firstName  String
+  lastName   String
+  documentId String? // documento de identidad (cédula); puede faltar al alta
+
+  // Texto de búsqueda normalizado (minúsculas y sin acentos) = nombre +
+  // apellido + documento. Permite buscar "gonzalez" y encontrar "González".
+  // Se mantiene en cada alta/edición desde la capa de aplicación.
+  searchText String @default("")
+  birthDate  DateTime
+  sex        Sex
+  maritalStatus MaritalStatus?
+  photoUrl   String?
+
+  // Contacto
+  address  String?
+  phone    String?
+  phoneAlt String?
+  email    String?
+
+  // Contacto de emergencia
+  emergencyName     String?
+  emergencyPhone    String?
+  emergencyRelation String?
+
+  // Seguro / obra social / previsión
+  insuranceProvider String?
+  insuranceNumber   String?
+
+  // Situación social
+  livesWith        String? // con quién vive
+  dependencyLevel  DependencyLevel?
+  housingSituation String?
+
+  // Antecedentes
+  medicalHistory   String? @db.Text // patológicos
+  surgicalHistory  String? @db.Text
+  familyHistory    String? @db.Text
+  smoking          HabitStatus?
+  alcohol          HabitStatus?
+  habitsNotes      String?
+  notes            String? @db.Text
+
+  // Relaciones
+  caregivers    Caregiver[]
+  conditions    Condition[]
+  allergies     Allergy[]
+  appointments  Appointment[]
+  consultations Consultation[]
+  vitalSigns    VitalSign[]
+  medications   Medication[]
+  documents     Document[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  createdById String?
+  createdBy   User?   @relation("PatientCreatedBy", fields: [createdById], references: [id])
+
+  @@index([lastName, firstName])
+  @@index([documentId])
+  @@index([searchText])
+  @@index([deletedAt])
+}
+
+// Cuidador / red de apoyo (clave en geriatría). Un paciente puede tener varios.
+model Caregiver {
+  id           String  @id @default(cuid())
+  patientId    String
+  patient      Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name         String
+  relationship String? // parentesco
+  phone        String?
+  livesWith    Boolean @default(false) // ¿convive con el paciente?
+  isPrimary    Boolean @default(false) // ¿cuidador principal?
+  notes        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+}
+
+// Condición crónica / comorbilidad.
+model Condition {
+  id        String   @id @default(cuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name      String
+  since     DateTime? // desde cuándo (aproximado)
+  active    Boolean  @default(true)
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+}
+
+// Alergia. Siempre se resalta en rojo en la interfaz.
+model Allergy {
+  id        String           @id @default(cuid())
+  patientId String
+  patient   Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  substance String // sustancia / fármaco
+  reaction  String?
+  severity  AllergySeverity?
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Agenda / Citas (Fase 2)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Appointment {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  scheduledAt DateTime // fecha y hora de inicio (UTC)
+  durationMin Int      @default(30)
+  reason      String? // motivo de consulta
+  type        AppointmentType   @default(CONTROL)
+  status      AppointmentStatus @default(PROGRAMADA)
+  notes       String?           @db.Text
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  createdById String?
+  createdBy   User?   @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
+
+  // Una cita puede tener (opcionalmente) su consulta asociada (1–1).
+  consultation Consultation?
+
+  @@index([scheduledAt])
+  @@index([patientId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Consultas (historia clínica) y signos vitales (Fase 3)
+// ─────────────────────────────────────────────────────────────────────────
+
+// Consulta en formato SOAP (Subjetivo, Objetivo, Análisis, Plan).
+model Consultation {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  // Vínculo opcional 1–1 con la cita que originó la consulta.
+  appointmentId String?      @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+
+  date       DateTime @default(now())
+  subjective String?  @db.Text // S: relato del paciente
+  objective  String?  @db.Text // O: examen / hallazgos
+  assessment String?  @db.Text // A: análisis / evaluación
+  plan       String?  @db.Text // P: plan / indicaciones
+
+  vitalSigns VitalSign[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String? // id del autor (sin relación; auditoría en AuditLog)
+
+  @@index([patientId])
+  @@index([date])
+  @@index([deletedAt])
+}
+
+// Registro de signos vitales (con seguimiento en el tiempo).
+model VitalSign {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  consultationId String?
+  consultation   Consultation? @relation(fields: [consultationId], references: [id])
+
+  measuredAt        DateTime @default(now())
+  systolic          Int? // PA sistólica (mmHg)
+  diastolic         Int? // PA diastólica (mmHg)
+  heartRate         Int? // FC (lpm)
+  respiratoryRate   Int? // FR (rpm)
+  temperature       Float? // Tº (°C)
+  oxygenSat         Int? // SatO2 (%)
+  weight            Float? // peso (kg)
+  height            Float? // talla (cm)
+  bmi               Float? // IMC (calculado)
+  calfCircumference Float? // circunferencia de pantorrilla (cm)
+  notes             String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  @@index([patientId])
+  @@index([measuredAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Medicación (polifarmacia) — Fase 4
+// ─────────────────────────────────────────────────────────────────────────
+
+model Medication {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  drug         String // fármaco
+  dose         String? // dosis (ej. "10 mg")
+  frequency    String? // frecuencia (ej. "cada 8 h")
+  route        MedicationRoute?
+  startDate    DateTime? // fecha de inicio
+  prescribedBy String? // indicado por
+
+  status          MedicationStatus @default(ACTIVA)
+  suspendedAt     DateTime? // fecha de suspensión
+  suspendedReason String? // motivo de suspensión
+
+  // Alerta/interacción marcada manualmente (se resalta en la conciliación).
+  alertNote String?
+  notes     String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+
+  @@index([patientId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Documentos y estudios (Fase 5)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Document {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  title     String
+  category  DocumentCategory @default(OTRO)
+  studyDate DateTime? // fecha de realización del estudio
+
+  // Metadatos del archivo. storedPath es relativo a STORAGE_DIR.
+  fileName  String // nombre original
+  storedPath String // ruta relativa en el almacenamiento
+  mimeType  String
+  size      Int // bytes
+
+  notes String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+
+  @@index([patientId])
+  @@index([category])
+  @@index([deletedAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────────

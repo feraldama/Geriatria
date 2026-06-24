@@ -8,18 +8,24 @@
  * apropiada para usuarios adultos mayores.
  */
 :root {
-  --color-primary: #0891b2;
+  /*
+   * Tonos elegidos para cumplir WCAG AA (≥4.5:1 con texto blanco / sobre el
+   * fondo). El design system sugería cian-600/emerald-600, pero con texto
+   * blanco no llegaban a 4.5:1; usamos cian-700 y emerald-700 (verificados:
+   * 5.36:1 y 5.48:1). La prioridad de accesibilidad del propio estilo manda.
+   */
+  --color-primary: #0e7490; /* cian-700: blanco 5.36:1, sobre fondo 5.11:1 */
   --color-on-primary: #ffffff;
   --color-secondary: #22d3ee;
-  --color-accent: #059669;
+  --color-accent: #047857; /* emerald-700: blanco 5.48:1 */
   --color-background: #f3fbfd; /* cian muy suave para no cansar la vista */
-  --color-foreground: #134e5a;
+  --color-foreground: #134e5a; /* sobre fondo 8.84:1 */
   --color-card: #ffffff;
   --color-muted: #e8f1f6;
-  --color-muted-foreground: #4b6b75;
+  --color-muted-foreground: #4b6b75; /* sobre fondo 5.47:1 */
   --color-border: #cfe9f1;
-  --color-destructive: #dc2626;
-  --color-ring: #0891b2;
+  --color-destructive: #dc2626; /* blanco 4.83:1 */
+  --color-ring: #0e7490;
 
   /*
    * Tamaño de fuente base ajustable (preferencia del usuario, sección perfil).

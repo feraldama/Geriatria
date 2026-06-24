@@ -1,0 +1,49 @@
+import * as React from "react";
+import { cn } from "@/lib/utils";
+
+interface DateInputProps {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  onBlur?: () => void;
+  invalid?: boolean;
+  className?: string;
+  "aria-describedby"?: string;
+}
+
+/**
+ * Campo de fecha en formato `dd/mm/aaaa`. Inserta las barras automáticamente
+ * a medida que se escriben dígitos. Es un componente controlado (se usa con
+ * Controller de react-hook-form). Teclado numérico en móvil.
+ */
+function formatAsDate(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 8);
+  const parts = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean);
+  return parts.join("/");
+}
+
+export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
+  ({ id, value, onChange, onBlur, invalid, className, ...rest }, ref) => (
+    <input
+      ref={ref}
+      id={id}
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      placeholder="dd/mm/aaaa"
+      value={value}
+      aria-invalid={invalid || undefined}
+      onChange={(e) => onChange(formatAsDate(e.target.value))}
+      onBlur={onBlur}
+      className={cn(
+        "flex min-h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-base text-foreground tabular-nums",
+        "placeholder:text-muted-foreground transition-colors",
+        "focus-visible:outline-none focus-visible:border-primary",
+        "aria-[invalid=true]:border-destructive",
+        className,
+      )}
+      {...rest}
+    />
+  ),
+);
+DateInput.displayName = "DateInput";

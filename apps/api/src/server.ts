@@ -11,6 +11,11 @@ import { env, corsOrigins } from "./env.js";
 import { healthRouter } from "./routes/health.js";
 import { authRouter } from "./routes/auth.js";
 import { profileRouter } from "./routes/profile.js";
+import { patientsRouter } from "./routes/patients.js";
+import { appointmentsRouter } from "./routes/appointments.js";
+import { dashboardRouter } from "./routes/dashboard.js";
+import { clinicalRouter } from "./routes/clinical.js";
+import { documentsRouter } from "./routes/documents.js";
 import { notFoundHandler, errorHandler } from "./middleware/error.js";
 
 export function createApp(): Express {
@@ -60,6 +65,12 @@ export function createApp(): Express {
   api.use("/auth/login", loginLimiter);
   api.use("/auth", authRouter);
   api.use("/profile", profileRouter);
+  api.use("/patients", patientsRouter);
+  // Rutas clínicas anidadas (/patients/:id/consultations|vitals|timeline).
+  api.use("/patients", clinicalRouter);
+  api.use("/patients", documentsRouter);
+  api.use("/appointments", appointmentsRouter);
+  api.use("/dashboard", dashboardRouter);
   app.use("/api/v1", api);
 
   app.use(notFoundHandler);

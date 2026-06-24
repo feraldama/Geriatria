@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -38,8 +39,14 @@ const NAV: NavItem[] = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data: user } = useCurrentUser();
+  const { data: user, isLoading } = useCurrentUser();
   const logout = useLogout();
+
+  // Si la sesión ya no es válida (cookie presente pero token vencido), el
+  // backend responde 401 y `user` queda en null: volvemos al login.
+  useEffect(() => {
+    if (!isLoading && user === null) router.replace("/login");
+  }, [isLoading, user, router]);
 
   const items = NAV.filter((i) => !i.permission || hasPermission(user, i.permission));
 

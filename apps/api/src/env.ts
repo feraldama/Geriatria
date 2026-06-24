@@ -17,6 +17,12 @@ const envSchema = z.object({
     .default("false")
     .transform((v) => v === "true"),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  // Directorio base para archivos subidos (documentos clínicos). El operador
+  // puede apuntarlo a un volumen persistente; la capa de almacenamiento está
+  // abstraída para migrar a S3/compatible más adelante.
+  STORAGE_DIR: z.string().default("./storage"),
+  // Tamaño máximo de archivo subido, en MB.
+  MAX_UPLOAD_MB: z.coerce.number().int().positive().default(25),
   ADMIN_EMAIL: z.string().email().default("admin@geriatria.local"),
   ADMIN_PASSWORD: z.string().min(8).default("Admin12345"),
   ADMIN_NAME: z.string().default("Administrador"),

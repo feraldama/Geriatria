@@ -38,7 +38,8 @@ authRouter.post("/login", validateBody(loginSchema), async (req, res, next) => {
     }
 
     // ¿Cuenta bloqueada temporalmente?
-    if (user.lockedUntil && user.lockedUntil > new Date()) {
+    const lockActive = !!user.lockedUntil && user.lockedUntil > new Date();
+    if (lockActive) {
       await recordAudit({ userId: user.id, action: "login.blocked", req });
       throw tooManyRequests(
         `Cuenta bloqueada temporalmente. Intentá de nuevo más tarde.`,
@@ -50,9 +51,13 @@ authRouter.post("/login", validateBody(loginSchema), async (req, res, next) => {
       throw invalidCredentials;
     }
 
+    // Si había un bloqueo y ya venció, partimos el contador de cero para no
+    // re-bloquear con un único error posterior.
+    const priorAttempts = user.lockedUntil ? 0 : user.failedLoginAttempts;
+
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) {
-      const attempts = user.failedLoginAttempts + 1;
+      const attempts = priorAttempts + 1;
       const shouldLock = attempts >= MAX_FAILED_ATTEMPTS;
       await prisma.user.update({
         where: { id: user.id },

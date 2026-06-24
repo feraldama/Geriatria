@@ -2,8 +2,34 @@
 
 Sistema de gestión clínica para una médica especialista en geriatría, pensado
 para el seguimiento longitudinal de pacientes adultos mayores. Se construye **por
-fases**; este repositorio corresponde a la **Fase 0** (andamiaje + autenticación
-y control de acceso por roles).
+fases**.
+
+Fases implementadas:
+- **Fase 0** — andamiaje del monorepo, autenticación (JWT en cookie httpOnly) y
+  control de acceso por roles (RBAC).
+- **Fase 1** — gestión de pacientes: ficha completa (datos personales, contacto,
+  emergencia, seguro, situación social, antecedentes), cuidadores/red de apoyo,
+  condiciones crónicas y alergias. Listado con **búsqueda (insensible a acentos)
+  y paginación en el backend**, alta, edición y baja lógica.
+- **Fase 2** — agenda: calendario con vistas **día / semana / mes**, alta/edición
+  de citas (paciente, fecha, hora, duración, motivo, tipo, estado), cambios
+  rápidos de estado (confirmar / atendida / ausente / cancelar) y baja lógica.
+  Pantalla de inicio **"agenda de hoy"** con las citas del día.
+- **Fase 3** — consultas y signos vitales: consulta en formato **SOAP** (con
+  signos vitales opcionales e **IMC calculado**), vinculable a una cita (que
+  pasa a *atendida*), edición de consultas, **registro de vitales con
+  seguimiento en el tiempo** y **línea de tiempo** del paciente (consultas +
+  citas). Sub-navegación de la ficha por permisos (recepción no ve la historia
+  clínica).
+- **Fase 4** — medicación (polifarmacia): **conciliación de medicación activa**
+  (con las alergias del paciente a la vista), alta/edición (fármaco, dosis,
+  frecuencia, vía, inicio, indicado por), **alertas/interacciones manuales**
+  resaltadas, **suspensión con motivo y fecha**, reactivación e historial.
+- **Fase 5** — documentos y estudios: **subida de archivos** (PDF, imágenes,
+  DICOM) con categoría (laboratorio, imagen, interconsulta, ECG, otro) y fecha
+  de realización, **previsualización en el navegador** (imágenes y PDF),
+  descarga y baja lógica. Almacenamiento en disco con ruta configurable
+  (`STORAGE_DIR`) y capa abstraída para migrar a S3 más adelante.
 
 ## Stack
 
@@ -76,9 +102,11 @@ pnpm install
 ### 4. Preparar la base de datos (Prisma)
 
 ```bash
-pnpm --filter @geriatria/api db:generate   # genera el cliente Prisma
-pnpm --filter @geriatria/api db:migrate     # crea las tablas
-pnpm --filter @geriatria/api db:seed        # admin + roles + permisos
+pnpm --filter @geriatria/api db:generate        # genera el cliente Prisma
+pnpm --filter @geriatria/api db:migrate          # crea las tablas
+pnpm --filter @geriatria/api db:seed             # admin + roles + permisos
+pnpm --filter @geriatria/api db:seed:patients        # (opcional) pacientes ficticios de prueba
+pnpm --filter @geriatria/api db:seed:appointments    # (opcional) citas ficticias de prueba
 ```
 
 ### 5. Levantar todo
