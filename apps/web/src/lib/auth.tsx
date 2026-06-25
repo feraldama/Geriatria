@@ -2,7 +2,12 @@
 
 /** Hooks de autenticación basados en TanStack Query. */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AuthenticatedUser, LoginInput } from "@geriatria/schemas";
+import type {
+  AuthenticatedUser,
+  LoginInput,
+  UpdateProfileInput,
+  ChangePasswordInput,
+} from "@geriatria/schemas";
 import { api, ApiError } from "./api";
 
 interface MeResponse {
@@ -40,6 +45,22 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => api.post("/auth/logout"),
     onSuccess: () => qc.setQueryData(["me"], null),
+  });
+}
+
+/** Actualiza el perfil propio (nombre, foto, preferencias). */
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdateProfileInput) => api.patch<MeResponse>("/profile", data),
+    onSuccess: (data) => qc.setQueryData(["me"], data.user),
+  });
+}
+
+/** Cambia la propia contraseña. */
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (data: ChangePasswordInput) => api.patch("/auth/password", data),
   });
 }
 

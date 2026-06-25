@@ -18,6 +18,11 @@ import {
   getScaleDefinition,
   computeScaleScore,
   isValidScaleDate,
+  vaccinationSchema,
+  updateVaccinationSchema,
+  carePlanSchema,
+  type VaccinationItem,
+  type CarePlanItem,
   APPOINTMENT_TYPE_LABELS,
   APPOINTMENT_STATUS_LABELS,
   PERMISSIONS,
@@ -679,6 +684,173 @@ clinicalRouter.post(
         req,
       });
       res.status(201).json({ scale: serializeScale(created, true) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ─── Vacunación ──────────────────────────────────────────────────────────
+
+function serializeVaccination(v: {
+  id: string;
+  vaccine: string;
+  doseDate: Date | null;
+  nextDoseDate: Date | null;
+  notes: string | null;
+}): VaccinationItem {
+  return {
+    id: v.id,
+    vaccine: v.vaccine,
+    doseDate: v.doseDate ? v.doseDate.toISOString() : null,
+    nextDoseDate: v.nextDoseDate ? v.nextDoseDate.toISOString() : null,
+    notes: v.notes,
+  };
+}
+
+clinicalRouter.get(
+  "/:patientId/vaccinations",
+  requirePermission(PERMISSIONS.CLINICAL_READ),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const vaccinations = await prisma.vaccination.findMany({
+        where: { patientId, deletedAt: null },
+        orderBy: [{ doseDate: "desc" }, { createdAt: "desc" }],
+      });
+      res.json({ data: vaccinations.map(serializeVaccination) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+clinicalRouter.post(
+  "/:patientId/vaccinations",
+  requirePermission(PERMISSIONS.CLINICAL_WRITE),
+  validateBody(vaccinationSchema),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const { vaccine, doseDate, nextDoseDate, notes } = req.body;
+      const created = await prisma.vaccination.create({
+        data: {
+          patientId,
+          vaccine,
+          doseDate: doseDate ? parseDate(doseDate) : null,
+          nextDoseDate: nextDoseDate ? parseDate(nextDoseDate) : null,
+          notes,
+          createdById: req.user!.id,
+        },
+      });
+      await recordAudit({ userId: req.user!.id, action: "vaccination.create", resource: "vaccination", resourceId: created.id, req });
+      res.status(201).json({ vaccination: serializeVaccination(created) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+clinicalRouter.patch(
+  "/:patientId/vaccinations/:vid",
+  requirePermission(PERMISSIONS.CLINICAL_WRITE),
+  validateBody(updateVaccinationSchema),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const vid = String(req.params.vid);
+      const existing = await prisma.vaccination.findFirst({ where: { id: vid, patientId, deletedAt: null }, select: { id: true } });
+      if (!existing) throw notFound("Vacuna no encontrada");
+      const b = req.body;
+      const updated = await prisma.vaccination.update({
+        where: { id: vid },
+        data: {
+          ...(b.vaccine !== undefined ? { vaccine: b.vaccine } : {}),
+          ...(b.doseDate !== undefined ? { doseDate: b.doseDate ? parseDate(b.doseDate) : null } : {}),
+          ...(b.nextDoseDate !== undefined ? { nextDoseDate: b.nextDoseDate ? parseDate(b.nextDoseDate) : null } : {}),
+          ...(b.notes !== undefined ? { notes: b.notes } : {}),
+        },
+      });
+      await recordAudit({ userId: req.user!.id, action: "vaccination.update", resource: "vaccination", resourceId: vid, req });
+      res.json({ vaccination: serializeVaccination(updated) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+clinicalRouter.delete(
+  "/:patientId/vaccinations/:vid",
+  requirePermission(PERMISSIONS.CLINICAL_WRITE),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const vid = String(req.params.vid);
+      const existing = await prisma.vaccination.findFirst({ where: { id: vid, patientId, deletedAt: null }, select: { id: true } });
+      if (!existing) throw notFound("Vacuna no encontrada");
+      await prisma.vaccination.update({ where: { id: vid }, data: { deletedAt: new Date() } });
+      await recordAudit({ userId: req.user!.id, action: "vaccination.delete", resource: "vaccination", resourceId: vid, req });
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ─── Plan de cuidados (uno por paciente) ───────────────────────────────────
+
+function serializeCarePlan(c: {
+  objectives: string | null;
+  indications: string | null;
+  nextControls: string | null;
+  nextControlDate: Date | null;
+  updatedAt: Date;
+} | null): CarePlanItem {
+  if (!c) return { objectives: null, indications: null, nextControls: null, nextControlDate: null, updatedAt: null };
+  return {
+    objectives: c.objectives,
+    indications: c.indications,
+    nextControls: c.nextControls,
+    nextControlDate: c.nextControlDate ? c.nextControlDate.toISOString() : null,
+    updatedAt: c.updatedAt.toISOString(),
+  };
+}
+
+clinicalRouter.get(
+  "/:patientId/care-plan",
+  requirePermission(PERMISSIONS.CLINICAL_READ),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const plan = await prisma.carePlan.findUnique({ where: { patientId } });
+      res.json({ carePlan: serializeCarePlan(plan) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+clinicalRouter.put(
+  "/:patientId/care-plan",
+  requirePermission(PERMISSIONS.CLINICAL_WRITE),
+  validateBody(carePlanSchema),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const { objectives, indications, nextControls, nextControlDate } = req.body;
+      const data = {
+        objectives,
+        indications,
+        nextControls,
+        nextControlDate: nextControlDate ? parseDate(nextControlDate) : null,
+      };
+      const plan = await prisma.carePlan.upsert({
+        where: { patientId },
+        update: data,
+        create: { patientId, ...data, createdById: req.user!.id },
+      });
+      await recordAudit({ userId: req.user!.id, action: "careplan.update", resource: "careplan", resourceId: plan.id, req });
+      res.json({ carePlan: serializeCarePlan(plan) });
     } catch (err) {
       next(err);
     }

@@ -8,6 +8,9 @@ import {
   LayoutDashboard,
   LogOut,
   Users,
+  UserCog,
+  ShieldCheck,
+  ScrollText,
   Stethoscope,
   type LucideIcon,
 } from "lucide-react";
@@ -25,15 +28,16 @@ interface NavItem {
 
 // La navegación se filtra por permisos: el frontend oculta lo que el usuario
 // no puede hacer (la validación real está en el backend).
-const NAV: NavItem[] = [
+const MAIN_NAV: NavItem[] = [
   { href: "/dashboard", label: "Agenda de hoy", icon: LayoutDashboard },
   { href: "/pacientes", label: "Pacientes", icon: Users, permission: PERMISSIONS.PATIENT_READ },
-  {
-    href: "/agenda",
-    label: "Agenda",
-    icon: CalendarDays,
-    permission: PERMISSIONS.APPOINTMENT_READ,
-  },
+  { href: "/agenda", label: "Agenda", icon: CalendarDays, permission: PERMISSIONS.APPOINTMENT_READ },
+];
+
+const ADMIN_NAV: NavItem[] = [
+  { href: "/usuarios", label: "Usuarios", icon: UserCog, permission: PERMISSIONS.USER_MANAGE },
+  { href: "/roles", label: "Roles", icon: ShieldCheck, permission: PERMISSIONS.ROLE_MANAGE },
+  { href: "/auditoria", label: "Auditoría", icon: ScrollText, permission: PERMISSIONS.AUDIT_READ },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -48,11 +52,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (!isLoading && user === null) router.replace("/login");
   }, [isLoading, user, router]);
 
-  const items = NAV.filter((i) => !i.permission || hasPermission(user, i.permission));
+  // Aplica la preferencia de tamaño de fuente del usuario al documento.
+  useEffect(() => {
+    if (user?.preferences?.fontSize) {
+      document.documentElement.dataset.fontSize = user.preferences.fontSize;
+    }
+  }, [user]);
+
+  const visible = (i: NavItem) => !i.permission || hasPermission(user, i.permission);
+  const mainItems = MAIN_NAV.filter(visible);
+  const adminItems = ADMIN_NAV.filter(visible);
 
   async function onLogout() {
     await logout.mutateAsync();
     router.replace("/login");
+  }
+
+  function renderItem(item: NavItem) {
+    const active = pathname === item.href || pathname.startsWith(item.href + "/");
+    const Icon = item.icon;
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "flex min-h-11 items-center gap-3 rounded-md px-3 text-base transition-colors",
+          active ? "bg-primary/10 font-medium text-primary" : "text-foreground hover:bg-muted",
+        )}
+      >
+        <Icon className="h-5 w-5" aria-hidden />
+        {item.label}
+      </Link>
+    );
   }
 
   return (
@@ -65,37 +97,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
           <span className="font-heading text-lg font-semibold">Geriatría</span>
         </div>
-        <nav aria-label="Navegación principal" className="flex gap-1 px-3 pb-3 md:flex-col">
-          {items.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + "/");
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex min-h-11 items-center gap-3 rounded-md px-3 text-base transition-colors",
-                  active
-                    ? "bg-primary/10 font-medium text-primary"
-                    : "text-foreground hover:bg-muted",
-                )}
-              >
-                <Icon className="h-5 w-5" aria-hidden />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav aria-label="Navegación principal" className="flex flex-wrap gap-1 px-3 pb-3 md:flex-col md:flex-nowrap">
+          {mainItems.map(renderItem)}
+
+          {adminItems.length > 0 && (
+            <>
+              <p className="mt-3 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Administración
+              </p>
+              {adminItems.map(renderItem)}
+            </>
+          )}
         </nav>
       </aside>
 
       {/* Columna principal: topbar + contenido. */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-4 border-b border-border bg-card px-6 py-3">
-          <div className="min-w-0">
+          {/* El nombre lleva al perfil propio. */}
+          <Link
+            href="/perfil"
+            className="min-w-0 rounded-md px-2 py-1 transition-colors hover:bg-muted"
+            aria-label="Mi perfil"
+          >
             <p className="truncate font-medium">{user?.name ?? "—"}</p>
             <p className="truncate text-sm text-muted-foreground">{user?.role.name ?? ""}</p>
-          </div>
+          </Link>
           <Button variant="outline" size="sm" onClick={onLogout} loading={logout.isPending}>
             <LogOut className="h-4 w-4" aria-hidden />
             Cerrar sesión

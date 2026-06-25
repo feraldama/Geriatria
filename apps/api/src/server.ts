@@ -16,6 +16,9 @@ import { appointmentsRouter } from "./routes/appointments.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { clinicalRouter } from "./routes/clinical.js";
 import { documentsRouter } from "./routes/documents.js";
+import { usersRouter } from "./routes/users.js";
+import { rolesRouter, permissionsRouter } from "./routes/roles.js";
+import { auditRouter } from "./routes/audit.js";
 import { notFoundHandler, errorHandler } from "./middleware/error.js";
 
 export function createApp(): Express {
@@ -71,6 +74,10 @@ export function createApp(): Express {
   api.use("/patients", documentsRouter);
   api.use("/appointments", appointmentsRouter);
   api.use("/dashboard", dashboardRouter);
+  api.use("/users", usersRouter);
+  api.use("/roles", rolesRouter);
+  api.use("/permissions", permissionsRouter);
+  api.use("/audit", auditRouter);
   app.use("/api/v1", api);
 
   app.use(notFoundHandler);

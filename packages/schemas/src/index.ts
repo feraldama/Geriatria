@@ -7,3 +7,5 @@ export * from "./clinical";
 export * from "./medication";
 export * from "./document";
 export * from "./scales";
+export * from "./admin";
+export * from "./extras";

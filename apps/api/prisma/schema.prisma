@@ -230,6 +230,8 @@ model Patient {
   medications   Medication[]
   documents     Document[]
   scales        AssessmentScale[]
+  vaccinations  Vaccination[]
+  carePlan      CarePlan?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -484,6 +486,48 @@ model AssessmentScale {
   @@index([patientId])
   @@index([type])
   @@index([deletedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Vacunación y plan de cuidados (Fase 8)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Vaccination {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  vaccine      String // nombre de la vacuna
+  doseDate     DateTime? // fecha de aplicación
+  nextDoseDate DateTime? // próxima dosis
+  notes        String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+
+  @@index([patientId])
+  @@index([nextDoseDate])
+  @@index([deletedAt])
+}
+
+// Plan de cuidados activo (uno por paciente).
+model CarePlan {
+  id String @id @default(cuid())
+
+  patientId String  @unique
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  objectives      String?   @db.Text
+  indications     String?   @db.Text
+  nextControls    String?   @db.Text
+  nextControlDate DateTime? // próximo control (para alertas)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
 }
 
 // ─────────────────────────────────────────────────────────────────────────

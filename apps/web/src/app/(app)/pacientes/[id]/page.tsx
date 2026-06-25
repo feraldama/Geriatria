@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Trash2, AlertTriangle, Phone, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, AlertTriangle, Phone, ShieldAlert, Printer } from "lucide-react";
 import {
   calculateAge,
   formatDate,
@@ -46,6 +46,7 @@ export default function PacienteDetallePage() {
 
   const canWrite = hasPermission(user, PERMISSIONS.PATIENT_WRITE);
   const canDelete = hasPermission(user, PERMISSIONS.PATIENT_DELETE);
+  const canClinical = hasPermission(user, PERMISSIONS.CLINICAL_READ);
 
   if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
   if (isError || !patient)
@@ -80,7 +81,18 @@ export default function PacienteDetallePage() {
             {p.documentId ? ` · Doc. ${p.documentId}` : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {canClinical && (
+            <a
+              href={`/imprimir/paciente/${id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              <Printer className="h-4 w-4" aria-hidden />
+              Imprimir / PDF
+            </a>
+          )}
           {canWrite && (
             <Link href={`/pacientes/${id}/editar`} className={cn(buttonVariants({ variant: "outline" }))}>
               <Pencil className="h-4 w-4" aria-hidden />

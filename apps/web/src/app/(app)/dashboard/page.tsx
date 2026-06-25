@@ -8,12 +8,14 @@ import {
   APPOINTMENT_TYPE_LABELS,
   APPOINTMENT_STATUS_LABELS,
 } from "@geriatria/schemas";
-import { useCurrentUser } from "@/lib/auth";
+import { PERMISSIONS } from "@geriatria/schemas";
+import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { useTodayAppointments } from "@/lib/appointments";
 import { STATUS_BADGE_VARIANT } from "@/lib/appointment-ui";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertsCard } from "@/components/alerts-card";
 import { cn } from "@/lib/utils";
 
 export default function DashboardPage() {
@@ -21,6 +23,7 @@ export default function DashboardPage() {
   const { data, isLoading } = useTodayAppointments();
   const hoy = formatDate(new Date()); // dd/mm/aaaa (helper central de fechas)
   const appointments = data?.appointments ?? [];
+  const canClinical = hasPermission(user, PERMISSIONS.CLINICAL_READ);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -91,6 +94,9 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Panel de alertas (solo con acceso clínico). */}
+      {canClinical && <AlertsCard />}
     </div>
   );
 }

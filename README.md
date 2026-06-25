@@ -36,6 +36,16 @@ Fases implementadas:
   con **puntaje automático** (re-calculado y validado en el backend),
   **interpretación con color por nivel** (verde/ámbar/rojo) y **gráficos de
   evolución**. Agrupadas por categoría e integradas en la línea de tiempo.
+- **Fase 7** — administración: **gestión de usuarios** (alta, edición,
+  desactivación, restablecimiento de contraseña), **roles y permisos** editables
+  (asignación desde la UI), **vista de auditoría** y **perfil propio** (datos,
+  preferencias —tamaño de fuente aplicado a toda la interfaz— y cambio de
+  contraseña). Navegación de administración filtrada por permisos.
+- **Fase 8** — extras y empaquetado: **vacunación** (con próximas dosis y
+  alertas de vencimiento), **plan de cuidados** (objetivos, indicaciones,
+  próximos controles), **panel de alertas** en el inicio (vacunas/controles
+  vencidos y escalas que empeoran), **resumen del paciente imprimible / PDF**, y
+  **empaquetado con Docker** para despliegue.
 
 ## Stack
 
@@ -142,6 +152,35 @@ Entrá a **http://localhost:3028**, iniciá sesión con el `ADMIN_EMAIL` /
 pnpm typecheck    # chequeo de tipos de todo el monorepo
 pnpm test         # tests (API)
 ```
+
+## Despliegue (producción)
+
+El sistema se sirve desde un servidor accesible por internet. **La
+infraestructura (TLS/HTTPS, respaldos de Postgres y secretos) la administra el
+operador**, no la aplicación. El frontend (`web`) es el punto de entrada público
+y reenvía `/api/v1/*` al backend por la red interna; el operador coloca un
+**reverse proxy con HTTPS** por delante de `web`.
+
+Stack completo con Docker:
+
+```bash
+# 1) Definí los secretos en un archivo .env junto al compose:
+#    POSTGRES_PASSWORD, JWT_SECRET, CORS_ORIGIN=https://tu-dominio,
+#    COOKIE_SECURE=true, ADMIN_EMAIL, ADMIN_PASSWORD
+# 2) Construí y levantá:
+docker compose -f docker-compose.prod.yml up -d --build
+# 3) Crear el administrador inicial (una vez):
+docker compose -f docker-compose.prod.yml exec api pnpm db:seed
+```
+
+- Las **migraciones** se aplican solas al arrancar el contenedor de la API
+  (`prisma migrate deploy`).
+- La cookie de sesión usa el flag **`Secure` configurable** (`COOKIE_SECURE=true`
+  cuando hay HTTPS) y **`CORS` restringido** al dominio del frontend.
+- Los **documentos subidos** persisten en el volumen `storage`; los **respaldos**
+  de ese volumen y de Postgres quedan a cargo del operador.
+- Zona horaria fija (`TZ=America/Asuncion`) para que la agenda interprete bien
+  las horas independientemente del host.
 
 ## Roles base sembrados
 
