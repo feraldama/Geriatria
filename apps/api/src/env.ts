@@ -7,7 +7,7 @@ import { z } from "zod";
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url("DATABASE_URL debe ser una URL de conexión válida"),
-  PORT: z.coerce.number().int().positive().default(4000),
+  PORT: z.coerce.number().int().positive().default(3027),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   JWT_SECRET: z.string().min(16, "JWT_SECRET debe tener al menos 16 caracteres"),
   JWT_EXPIRES_IN: z.string().default("8h"),
@@ -16,7 +16,7 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
-  CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  CORS_ORIGIN: z.string().default("http://localhost:3028"),
   // Directorio base para archivos subidos (documentos clínicos). El operador
   // puede apuntarlo a un volumen persistente; la capa de almacenamiento está
   // abstraída para migrar a S3/compatible más adelante.

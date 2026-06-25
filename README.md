@@ -118,7 +118,7 @@ pnpm --filter @geriatria/api db:seed:appointments    # (opcional) citas ficticia
 ### 5. Levantar todo
 
 ```bash
-pnpm dev          # API (http://localhost:4000) + Web (http://localhost:3000)
+pnpm dev          # API (http://localhost:3027) + Web (http://localhost:3028)
 ```
 
 O por separado:
@@ -128,12 +128,12 @@ pnpm dev:api
 pnpm dev:web
 ```
 
-Entrá a **http://localhost:3000**, iniciá sesión con el `ADMIN_EMAIL` /
+Entrá a **http://localhost:3028**, iniciá sesión con el `ADMIN_EMAIL` /
 `ADMIN_PASSWORD` que configuraste y cambiá la contraseña.
 
 ## Verificación de la Fase 0
 
-- `GET http://localhost:4000/health` responde `{ "status": "ok", "db": "up" }`.
+- `GET http://localhost:3027/health` responde `{ "status": "ok", "db": "up" }`.
 - El admin inicia sesión y ve el panel "Agenda de hoy".
 - Los endpoints protegidos (`/api/v1/auth/me`) devuelven 401 sin sesión.
 - Los permisos se validan en el backend (RBAC) en cada endpoint.

@@ -7,7 +7,7 @@ const nextConfig = {
   // backend Express. Evita problemas de CORS/cookies en desarrollo y mantiene
   // un único origen para el navegador.
   async rewrites() {
-    const apiUrl = process.env.API_INTERNAL_URL ?? "http://localhost:4000";
+    const apiUrl = process.env.API_INTERNAL_URL ?? "http://localhost:3027";
     return [{ source: "/api/v1/:path*", destination: `${apiUrl}/api/v1/:path*` }];
   },
 };
