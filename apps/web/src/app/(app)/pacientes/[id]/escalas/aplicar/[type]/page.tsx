@@ -6,10 +6,12 @@ import { ArrowLeft } from "lucide-react";
 import { getScaleDefinition } from "@geriatria/schemas";
 import { PatientSubHeader } from "@/components/patient-subheader";
 import { ScaleForm } from "@/components/scale-form";
+import { usePatient } from "@/lib/patients";
 
 export default function AplicarEscalaPage() {
   const { id, type } = useParams<{ id: string; type: string }>();
   const def = getScaleDefinition(type);
+  const { data: patient } = usePatient(id);
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -30,7 +32,7 @@ export default function AplicarEscalaPage() {
             <h2 className="font-heading text-xl font-semibold">Aplicar: {def.name}</h2>
             <p className="text-sm text-muted-foreground">{def.description}</p>
           </div>
-          <ScaleForm patientId={id} def={def} />
+          <ScaleForm patientId={id} def={def} sex={patient?.sex} />
         </>
       )}
     </div>

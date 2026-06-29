@@ -11,6 +11,7 @@
  * ajustarse según escolaridad.
  */
 import { isValidDateString } from "./date";
+import type { Sex } from "./patient";
 
 export const SCALE_TYPES = [
   "BARTHEL",
@@ -29,6 +30,9 @@ export const SCALE_TYPES = [
   "CHARLSON",
   "BRADEN",
   "NORTON",
+  "GIJON",
+  "APGAR",
+  "ZARIT",
 ] as const;
 export type ScaleType = (typeof SCALE_TYPES)[number];
 
@@ -39,9 +43,35 @@ export interface ScaleInterpretation {
 }
 const I = (label: string, level: ScaleLevel): ScaleInterpretation => ({ label, level });
 
+/**
+ * Contexto del paciente que algunas escalas necesitan para puntuar/interpretar.
+ * Por ahora solo el sexo (escala de Lawton: los hombres no puntúan 3 ítems y
+ * los puntos de corte difieren por sexo). Extensible a escolaridad, edad, etc.
+ */
+export interface ScaleContext {
+  sex?: Sex;
+}
+
+/** Puntos que dependen del sexo: columna M (femenino) y H (masculino). */
+export interface PerSexValue {
+  M: number;
+  H: number;
+}
+
+/** Columna de puntaje según sexo. OTRO/desconocido → M (versión completa). */
+function sexColumn(sex?: Sex): "M" | "H" {
+  return sex === "MASCULINO" ? "H" : "M";
+}
+
 export interface ScaleOption {
   label: string;
-  value: number;
+  /** Número fijo, o puntos dependientes del sexo (Lawton). */
+  value: number | PerSexValue;
+}
+
+/** Resuelve los puntos de una opción según el sexo del paciente. */
+export function optionPoints(opt: ScaleOption, sex?: Sex): number {
+  return typeof opt.value === "number" ? opt.value : opt.value[sexColumn(sex)];
 }
 
 // Pregunta con opciones (radio), rango (puntos por sección) o número (input).
@@ -56,10 +86,21 @@ export interface ScaleDefinition {
   category: string;
   description: string;
   maxScore: number;
+  /**
+   * Máximo dependiente del sexo cuando aplica (Lawton: M=8, H=5). Si está
+   * presente, prima sobre `maxScore`, que actúa como valor por defecto.
+   */
+  maxScoreBySex?: PerSexValue;
   /** true: más puntaje = mejor (Barthel, MMSE…). false: más = peor (GDS, Charlson…). */
   betterWhenHigher: boolean;
   questions: ScaleQuestion[];
-  interpret: (score: number) => ScaleInterpretation;
+  /** El contexto (sexo) solo lo usan las escalas que lo necesitan. */
+  interpret: (score: number, ctx?: ScaleContext) => ScaleInterpretation;
+}
+
+/** Máximo de la escala resuelto según el sexo del paciente. */
+export function scaleMaxScore(def: ScaleDefinition, sex?: Sex): number {
+  return def.maxScoreBySex ? def.maxScoreBySex[sexColumn(sex)] : def.maxScore;
 }
 
 export type ScaleAnswers = Record<string, number>;
@@ -128,28 +169,121 @@ const KATZ: ScaleDefinition = {
 };
 
 // ─── Escala de Lawton-Brody (AIVD) ─────────────────────────────────────────
+// Puntos dependientes del sexo: ítem que solo puntúa en mujeres (M=1, H=0).
+const SOLO_MUJER: PerSexValue = { M: 1, H: 0 };
+const NO_PUNTUA: PerSexValue = { M: 0, H: 0 };
+
 const LAWTON: ScaleDefinition = {
   type: "LAWTON",
   name: "Escala de Lawton-Brody",
   category: "Funcionalidad instrumental (AIVD)",
-  description: "Actividades instrumentales de la vida diaria (0–8).",
+  description:
+    "Actividades instrumentales de la vida diaria. El puntaje y la interpretación dependen del sexo: máximo 8 en mujeres y 5 en hombres (no se puntúan preparación de comida, cuidado de la casa ni lavado de ropa).",
   maxScore: 8,
+  maxScoreBySex: { M: 8, H: 5 },
   betterWhenHigher: true,
   questions: [
-    { id: "telefono", text: "Capacidad para usar el teléfono", kind: "options", options: [{ label: "Lo usa por iniciativa / marca números / contesta", value: 1 }, { label: "No usa el teléfono", value: 0 }] },
-    { id: "compras", text: "Hacer compras", kind: "options", options: [{ label: "Realiza todas las compras de forma independiente", value: 1 }, { label: "Necesita ayuda o es incapaz", value: 0 }] },
-    { id: "comida", text: "Preparación de la comida", kind: "options", options: [{ label: "Planea y prepara comidas de forma independiente", value: 1 }, { label: "Necesita que le preparen las comidas", value: 0 }] },
-    { id: "casa", text: "Cuidado de la casa", kind: "options", options: [{ label: "Mantiene la casa solo o con ayuda ocasional", value: 1 }, { label: "No participa en labores de la casa", value: 0 }] },
-    { id: "ropa", text: "Lavado de la ropa", kind: "options", options: [{ label: "Lava por sí solo / pequeñas prendas", value: 1 }, { label: "Lo realiza otra persona", value: 0 }] },
-    { id: "transporte", text: "Uso de medios de transporte", kind: "options", options: [{ label: "Viaja solo o en transporte público", value: 1 }, { label: "Solo viaja acompañado / no viaja", value: 0 }] },
-    { id: "medicacion", text: "Responsabilidad sobre su medicación", kind: "options", options: [{ label: "Toma su medicación correctamente", value: 1 }, { label: "Necesita que se la preparen", value: 0 }] },
-    { id: "finanzas", text: "Manejo de asuntos económicos", kind: "options", options: [{ label: "Maneja sus finanzas (ayuda solo en banca)", value: 1 }, { label: "Incapaz de manejar dinero", value: 0 }] },
+    {
+      id: "telefono",
+      text: "Capacidad para usar el teléfono",
+      kind: "options",
+      options: [
+        { label: "Utiliza el teléfono por iniciativa propia", value: 1 },
+        { label: "Es capaz de marcar bien algunos números familiares", value: 1 },
+        { label: "Es capaz de contestar el teléfono, pero no de marcar", value: 1 },
+        { label: "No utiliza el teléfono", value: 0 },
+      ],
+    },
+    {
+      id: "compras",
+      text: "Hacer compras",
+      kind: "options",
+      options: [
+        { label: "Realiza todas las compras necesarias independientemente", value: 1 },
+        { label: "Realiza independientemente pequeñas compras", value: 0 },
+        { label: "Necesita ir acompañado para realizar cualquier compra", value: 0 },
+        { label: "Totalmente incapaz de comprar", value: 0 },
+      ],
+    },
+    {
+      id: "comida",
+      text: "Preparación de la comida",
+      kind: "options",
+      options: [
+        { label: "Organiza, prepara y sirve las comidas por sí solo adecuadamente", value: SOLO_MUJER },
+        { label: "Prepara adecuadamente las comidas si se le proporcionan los ingredientes", value: NO_PUNTUA },
+        { label: "Prepara, calienta y sirve las comidas, pero no sigue una dieta adecuada", value: NO_PUNTUA },
+        { label: "Necesita que le preparen y sirvan las comidas", value: NO_PUNTUA },
+      ],
+    },
+    {
+      id: "casa",
+      text: "Cuidado de la casa",
+      kind: "options",
+      options: [
+        { label: "Mantiene la casa solo o con ayuda ocasional (trabajos pesados)", value: SOLO_MUJER },
+        { label: "Realiza tareas ligeras, como lavar los platos o hacer las camas", value: SOLO_MUJER },
+        { label: "Realiza tareas ligeras, pero no mantiene un adecuado nivel de limpieza", value: SOLO_MUJER },
+        { label: "Necesita ayuda en todas las labores de la casa", value: SOLO_MUJER },
+        { label: "No participa en ninguna labor de la casa", value: NO_PUNTUA },
+      ],
+    },
+    {
+      id: "ropa",
+      text: "Lavado de la ropa",
+      kind: "options",
+      options: [
+        { label: "Lava por sí solo toda su ropa", value: SOLO_MUJER },
+        { label: "Lava por sí solo pequeñas prendas", value: SOLO_MUJER },
+        { label: "Todo el lavado de ropa debe ser realizado por otro", value: NO_PUNTUA },
+      ],
+    },
+    {
+      id: "transporte",
+      text: "Uso de medios de transporte",
+      kind: "options",
+      options: [
+        { label: "Viaja solo en transporte público o conduce su propio coche", value: 1 },
+        { label: "Es capaz de coger un taxi, pero no usa otro medio de transporte", value: 1 },
+        { label: "Viaja en transporte público cuando va acompañado por otra persona", value: 1 },
+        { label: "Utiliza el taxi o el automóvil solo con ayuda de otros", value: 0 },
+        { label: "No viaja en absoluto", value: 0 },
+      ],
+    },
+    {
+      id: "medicacion",
+      text: "Responsabilidad respecto a su medicación",
+      kind: "options",
+      options: [
+        { label: "Es capaz de tomar su medicación a la hora y dosis correcta", value: 1 },
+        { label: "Toma su medicación si la dosis es preparada previamente", value: 0 },
+        { label: "No es capaz de administrarse su medicación", value: 0 },
+      ],
+    },
+    {
+      id: "finanzas",
+      text: "Manejo de sus asuntos económicos",
+      kind: "options",
+      options: [
+        { label: "Se encarga de sus asuntos económicos por sí solo", value: 1 },
+        { label: "Realiza las compras de cada día, pero necesita ayuda en las grandes compras y bancos", value: 1 },
+        { label: "Incapaz de manejar dinero", value: 0 },
+      ],
+    },
   ],
-  interpret: (s) => {
-    if (s >= 8) return I("Independiente", "good");
+  // Puntos de corte distintos por sexo (lámina oficial Lawton-Brody).
+  interpret: (s, ctx) => {
+    if (ctx?.sex === "MASCULINO") {
+      if (s >= 5) return I("Autónomo", "good");
+      if (s === 4) return I("Dependencia ligera", "good");
+      if (s >= 2) return I("Dependencia moderada", "warning");
+      if (s === 1) return I("Dependencia grave", "bad");
+      return I("Dependencia total", "bad");
+    }
+    if (s >= 8) return I("Autónoma", "good");
     if (s >= 6) return I("Dependencia ligera", "good");
     if (s >= 4) return I("Dependencia moderada", "warning");
-    if (s >= 2) return I("Dependencia severa", "bad");
+    if (s >= 2) return I("Dependencia grave", "bad");
     return I("Dependencia total", "bad");
   },
 };
@@ -492,6 +626,168 @@ const NORTON: ScaleDefinition = {
   },
 };
 
+// ─── Escala sociofamiliar de Gijón (abreviada, Barcelona) ──────────────────
+// 5 ítems de 1 a 5 puntos (5–25). Mayor puntaje = peor situación social.
+const SOCIAL_CAT = "Valoración social y familiar";
+const GIJON: ScaleDefinition = {
+  type: "GIJON",
+  name: "Escala sociofamiliar de Gijón",
+  category: SOCIAL_CAT,
+  description:
+    "Valoración del riesgo social (5–25). Mayor puntaje = peor situación social. Versión abreviada (Barcelona).",
+  maxScore: 25,
+  betterWhenHigher: false,
+  questions: [
+    {
+      id: "familiar",
+      text: "Situación familiar",
+      kind: "options",
+      options: [
+        { label: "Vive con familia, sin dependencia físico/psíquica", value: 1 },
+        { label: "Vive con cónyuge de similar edad", value: 2 },
+        { label: "Vive con familia y/o cónyuge con algún grado de dependencia", value: 3 },
+        { label: "Vive solo/a y tiene hijos próximos", value: 4 },
+        { label: "Vive solo/a y carece de hijos o viven alejados", value: 5 },
+      ],
+    },
+    {
+      id: "economica",
+      text: "Situación económica",
+      kind: "options",
+      options: [
+        { label: "Más de 1,5 veces el salario mínimo", value: 1 },
+        { label: "Entre 1 y 1,5 veces el salario mínimo", value: 2 },
+        { label: "Equivalente al salario mínimo / pensión contributiva mínima", value: 3 },
+        { label: "Pensión no contributiva o ingreso inferior al mínimo", value: 4 },
+        { label: "Sin ingresos o por debajo de los anteriores", value: 5 },
+      ],
+    },
+    {
+      id: "vivienda",
+      text: "Vivienda",
+      kind: "options",
+      options: [
+        { label: "Adecuada a las necesidades", value: 1 },
+        { label: "Barreras arquitectónicas, pero con elementos que las compensan", value: 2 },
+        { label: "Humedades, mala higiene o equipamiento inadecuado", value: 3 },
+        { label: "Ausencia de equipamientos mínimos (agua, baño, electricidad)", value: 4 },
+        { label: "Vivienda inadecuada o ausencia de vivienda", value: 5 },
+      ],
+    },
+    {
+      id: "relaciones",
+      text: "Relaciones sociales",
+      kind: "options",
+      options: [
+        { label: "Mantiene relaciones sociales fuera del domicilio", value: 1 },
+        { label: "Se relaciona solo con familia y vecinos", value: 2 },
+        { label: "Se relaciona solo con familia o solo con vecinos", value: 3 },
+        { label: "No sale del domicilio, pero recibe visitas", value: 4 },
+        { label: "No sale del domicilio ni recibe visitas", value: 5 },
+      ],
+    },
+    {
+      id: "apoyo",
+      text: "Apoyo de la red social",
+      kind: "options",
+      options: [
+        { label: "Con apoyo familiar o vecinal suficiente", value: 1 },
+        { label: "Con apoyo de voluntariado o ayuda domiciliaria", value: 2 },
+        { label: "No tiene apoyo, pero podría tenerlo", value: 3 },
+        { label: "Pendiente de ingreso en residencia geriátrica", value: 4 },
+        { label: "Necesita cuidados permanentes que no recibe", value: 5 },
+      ],
+    },
+  ],
+  interpret: (s) => {
+    if (s <= 9) return I("Situación social buena", "good");
+    if (s <= 14) return I("Riesgo social", "warning");
+    return I("Problema social", "bad");
+  },
+};
+
+// ─── APGAR familiar ─────────────────────────────────────────────────────────
+// 5 ítems de 0 a 2 (0–10). Mayor puntaje = mejor función familiar.
+const APGAR_OPTS = [
+  { label: "Casi nunca", value: 0 },
+  { label: "A veces", value: 1 },
+  { label: "Casi siempre", value: 2 },
+];
+const APGAR: ScaleDefinition = {
+  type: "APGAR",
+  name: "APGAR familiar",
+  category: SOCIAL_CAT,
+  description: "Percepción de la función familiar (0–10). Mayor puntaje = mejor función familiar.",
+  maxScore: 10,
+  betterWhenHigher: true,
+  questions: [
+    { id: "adaptacion", text: "Me satisface la ayuda que recibo de mi familia cuando tengo un problema o necesidad", kind: "options", options: APGAR_OPTS },
+    { id: "participacion", text: "Me satisface cómo mi familia habla y comparte los problemas conmigo", kind: "options", options: APGAR_OPTS },
+    { id: "crecimiento", text: "Me satisface cómo mi familia acepta y apoya mis deseos de emprender nuevas actividades", kind: "options", options: APGAR_OPTS },
+    { id: "afecto", text: "Me satisface cómo mi familia expresa afecto y responde a mis emociones (rabia, tristeza, amor)", kind: "options", options: APGAR_OPTS },
+    { id: "resolucion", text: "Me satisface cómo compartimos en mi familia el tiempo, los espacios y el dinero", kind: "options", options: APGAR_OPTS },
+  ],
+  interpret: (s) => {
+    if (s >= 7) return I("Familia funcional", "good");
+    if (s >= 4) return I("Disfunción familiar leve", "warning");
+    return I("Disfunción familiar grave", "bad");
+  },
+};
+
+// ─── Escala de sobrecarga del cuidador de Zarit ────────────────────────────
+// 22 ítems de 1 a 5 (22–110). Evalúa al CUIDADOR. Mayor puntaje = más sobrecarga.
+const ZARIT_OPTS = [
+  { label: "Nunca", value: 1 },
+  { label: "Rara vez", value: 2 },
+  { label: "Algunas veces", value: 3 },
+  { label: "Bastantes veces", value: 4 },
+  { label: "Casi siempre", value: 5 },
+];
+const ZARIT_ITEMS: string[] = [
+  "¿Siente que su familiar solicita más ayuda de la que realmente necesita?",
+  "¿Siente que, por el tiempo que dedica a su familiar, ya no dispone de tiempo suficiente para usted?",
+  "¿Se siente tenso/a cuando tiene que cuidar a su familiar y atender además otras responsabilidades?",
+  "¿Se siente avergonzado/a por el comportamiento de su familiar?",
+  "¿Se siente enfadado/a cuando está cerca de su familiar?",
+  "¿Cree que la situación afecta de forma negativa su relación con otros familiares o amigos?",
+  "¿Siente temor por el futuro que le espera a su familiar?",
+  "¿Siente que su familiar depende de usted?",
+  "¿Se siente agobiado/a cuando tiene que estar junto a su familiar?",
+  "¿Siente que su salud se ha resentido por cuidar a su familiar?",
+  "¿Siente que no tiene la vida privada que desearía por cuidar a su familiar?",
+  "¿Cree que su vida social se ha visto afectada por cuidar a su familiar?",
+  "¿Se siente incómodo/a para invitar amigos a casa por cuidar a su familiar?",
+  "¿Cree que su familiar espera que usted le cuide como si fuera la única persona con quien puede contar?",
+  "¿Cree que no dispone de dinero suficiente para cuidar a su familiar además de sus otros gastos?",
+  "¿Siente que será incapaz de cuidar a su familiar por mucho más tiempo?",
+  "¿Siente que ha perdido el control sobre su vida desde que comenzó la enfermedad de su familiar?",
+  "¿Desearía poder dejar el cuidado de su familiar a otras personas?",
+  "¿Se siente inseguro/a acerca de lo que debe hacer con su familiar?",
+  "¿Siente que debería hacer más de lo que hace por su familiar?",
+  "¿Cree que podría cuidar a su familiar mejor de lo que lo hace?",
+  "En general, ¿se siente muy sobrecargado/a por tener que cuidar de su familiar?",
+];
+const ZARIT: ScaleDefinition = {
+  type: "ZARIT",
+  name: "Escala de sobrecarga del cuidador de Zarit",
+  category: SOCIAL_CAT,
+  description:
+    "Sobrecarga del cuidador principal (22–110). Se aplica al CUIDADOR, no al paciente. Mayor puntaje = más sobrecarga.",
+  maxScore: 110,
+  betterWhenHigher: false,
+  questions: ZARIT_ITEMS.map((text, i) => ({
+    id: `z${i + 1}`,
+    text,
+    kind: "options" as const,
+    options: ZARIT_OPTS,
+  })),
+  interpret: (s) => {
+    if (s < 47) return I("Sin sobrecarga", "good");
+    if (s <= 55) return I("Sobrecarga leve", "warning");
+    return I("Sobrecarga intensa", "bad");
+  },
+};
+
 export const SCALE_DEFINITIONS: Record<ScaleType, ScaleDefinition> = {
   BARTHEL,
   KATZ,
@@ -509,6 +805,9 @@ export const SCALE_DEFINITIONS: Record<ScaleType, ScaleDefinition> = {
   CHARLSON,
   BRADEN,
   NORTON,
+  GIJON,
+  APGAR,
+  ZARIT,
 };
 
 /** Categorías en orden de presentación. */
@@ -528,8 +827,18 @@ export function getScaleDefinition(type: string): ScaleDefinition | null {
 /**
  * Calcula el puntaje total a partir de las respuestas, validando contra la
  * definición. Lanza si una respuesta es inválida o falta.
+ *
+ * Semántica de `answers`:
+ *  - preguntas de tipo "options": el valor guardado es el ÍNDICE de la opción
+ *    elegida (no los puntos), para preservar el nivel exacto incluso cuando
+ *    varias opciones suman lo mismo o el puntaje depende del sexo (Lawton).
+ *  - "range"/"number": el valor guardado son los puntos directamente.
  */
-export function computeScaleScore(def: ScaleDefinition, answers: ScaleAnswers): number {
+export function computeScaleScore(
+  def: ScaleDefinition,
+  answers: ScaleAnswers,
+  ctx?: ScaleContext,
+): number {
   let total = 0;
   for (const q of def.questions) {
     const raw = answers[q.id];
@@ -538,13 +847,42 @@ export function computeScaleScore(def: ScaleDefinition, answers: ScaleAnswers): 
     }
     const value = Number(raw);
     if (q.kind === "options") {
-      if (!q.options.some((o) => o.value === value)) throw new Error(`Respuesta inválida en "${q.text}"`);
+      const opt = q.options[value];
+      if (!Number.isInteger(value) || !opt) {
+        throw new Error(`Respuesta inválida en "${q.text}"`);
+      }
+      total += optionPoints(opt, ctx?.sex);
     } else if (q.kind === "range") {
       if (value < 0 || value > q.max) throw new Error(`Valor fuera de rango en "${q.text}"`);
+      total += value;
     } else {
       if (value < q.min || value > q.max) throw new Error(`Valor fuera de rango en "${q.text}"`);
+      total += value;
     }
-    total += value;
+  }
+  return total;
+}
+
+/**
+ * Puntaje parcial (tolerante a ítems sin responder), para el cálculo en vivo
+ * del formulario. Usa la misma semántica de índices que `computeScaleScore`.
+ */
+export function partialScaleScore(
+  def: ScaleDefinition,
+  answers: ScaleAnswers,
+  ctx?: ScaleContext,
+): number {
+  let total = 0;
+  for (const q of def.questions) {
+    const raw = answers[q.id];
+    if (raw === undefined || raw === null || Number.isNaN(Number(raw))) continue;
+    const value = Number(raw);
+    if (q.kind === "options") {
+      const opt = Number.isInteger(value) ? q.options[value] : undefined;
+      if (opt) total += optionPoints(opt, ctx?.sex);
+    } else {
+      total += value;
+    }
   }
   return total;
 }

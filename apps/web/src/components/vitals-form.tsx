@@ -32,6 +32,8 @@ interface FormValues {
   weight: string;
   height: string;
   calfCircumference: string;
+  bloodGlucose: string;
+  gripStrength: string;
   notes: string;
 }
 
@@ -70,6 +72,8 @@ export function VitalsForm({
       weight: "",
       height: "",
       calfCircumference: "",
+      bloodGlucose: "",
+      gripStrength: "",
       notes: "",
     },
   });
@@ -138,6 +142,8 @@ export function VitalsForm({
         {num("weight", "Peso", "kg", "0.1")}
         {num("height", "Talla", "cm", "0.1")}
         {num("calfCircumference", "C. pantorrilla", "cm", "0.1")}
+        {num("bloodGlucose", "Glicemia capilar", "mg/dL")}
+        {num("gripStrength", "Fuerza de agarre", "kg", "0.1")}
         <Field label="IMC (calculado)" htmlFor="vf-bmi">
           <Input id="vf-bmi" value={bmi ?? ""} readOnly placeholder="—" className="bg-muted/40" />
         </Field>

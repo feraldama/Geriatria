@@ -31,6 +31,8 @@ function VitalsSummary({ v }: { v: VitalSignItem }) {
   if (v.height) items.push(`Talla ${v.height} cm`);
   if (v.bmi) items.push(`IMC ${v.bmi}`);
   if (v.calfCircumference) items.push(`C. pantorrilla ${v.calfCircumference} cm`);
+  if (v.bloodGlucose) items.push(`Glicemia capilar ${v.bloodGlucose} mg/dL`);
+  if (v.gripStrength) items.push(`Fuerza de agarre ${v.gripStrength} kg`);
   if (items.length === 0) return null;
   return (
     <ul className="flex flex-wrap gap-x-4 gap-y-1">

@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { formatDate, getScaleDefinition } from "@geriatria/schemas";
+import { formatDate, getScaleDefinition, optionPoints } from "@geriatria/schemas";
 import { useScale } from "@/lib/scales";
+import { usePatient } from "@/lib/patients";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LEVEL_BADGE } from "@/lib/scale-ui";
@@ -12,21 +13,24 @@ import { LEVEL_BADGE } from "@/lib/scale-ui";
 export default function EscalaDetallePage() {
   const { id, sid } = useParams<{ id: string; sid: string }>();
   const { data: scale, isLoading, isError } = useScale(id, sid);
+  const { data: patient } = usePatient(id);
+  const sex = patient?.sex;
 
   if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
   if (isError || !scale) return <p className="p-6 text-destructive">No se pudo cargar la escala.</p>;
 
   const def = getScaleDefinition(scale.type);
 
-  // Etiqueta legible de cada respuesta según la definición de la escala.
+  // Etiqueta legible de cada respuesta. En "options" la respuesta guardada es
+  // el índice de la opción; mostramos su texto y los puntos resueltos por sexo.
   function answerLabel(qid: string): { text: string; value: number } | null {
     if (!def) return null;
     const q = def.questions.find((x) => x.id === qid);
     const value = scale!.answers?.[qid];
     if (!q || value === undefined) return null;
     if (q.kind === "options") {
-      const opt = q.options.find((o) => o.value === value);
-      return { text: `${q.text}: ${opt?.label ?? value}`, value };
+      const opt = q.options[value];
+      return { text: `${q.text}: ${opt?.label ?? "—"}`, value: opt ? optionPoints(opt, sex) : 0 };
     }
     return { text: `${q.text}`, value };
   }
@@ -53,7 +57,7 @@ export default function EscalaDetallePage() {
             <span className="text-lg font-normal text-muted-foreground"> / {scale.maxScore}</span>
           </span>
           {scale.interpretation && (
-            <Badge variant={def ? LEVEL_BADGE[def.interpret(scale.score).level] : "primary"}>
+            <Badge variant={def ? LEVEL_BADGE[def.interpret(scale.score, { sex }).level] : "primary"}>
               {scale.interpretation}
             </Badge>
           )}

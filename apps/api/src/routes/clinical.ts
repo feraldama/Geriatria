@@ -17,6 +17,7 @@ import {
   parseDate,
   getScaleDefinition,
   computeScaleScore,
+  scaleMaxScore,
   isValidScaleDate,
   vaccinationSchema,
   updateVaccinationSchema,
@@ -78,6 +79,8 @@ function vitalData(input: Partial<VitalSignInput>, patientId: string, measuredAt
     height,
     bmi: calculateBMI(weight, height),
     calfCircumference: input.calfCircumference ?? null,
+    bloodGlucose: input.bloodGlucose ?? null,
+    gripStrength: input.gripStrength ?? null,
     notes: input.notes ?? null,
   };
 }
@@ -95,6 +98,8 @@ function hasAnyVital(v?: Partial<VitalSignInput>): boolean {
     v.weight,
     v.height,
     v.calfCircumference,
+    v.bloodGlucose,
+    v.gripStrength,
   ].some((x) => x !== null && x !== undefined);
 }
 
@@ -656,9 +661,17 @@ clinicalRouter.post(
         throw badRequest("Respuestas inválidas");
       }
 
+      // El sexo se usa para puntuar/interpretar escalas dependientes del sexo
+      // (Lawton). Lo tomamos del paciente, nunca del cliente.
+      const patientSex = await prisma.patient.findUnique({
+        where: { id: patientId },
+        select: { sex: true },
+      });
+      const ctx = { sex: patientSex?.sex };
+
       let score: number;
       try {
-        score = computeScaleScore(def, answers as ScaleAnswers);
+        score = computeScaleScore(def, answers as ScaleAnswers, ctx);
       } catch (e) {
         throw badRequest(e instanceof Error ? e.message : "Respuestas inválidas");
       }
@@ -668,10 +681,10 @@ clinicalRouter.post(
           patientId,
           type: def.type,
           score,
-          maxScore: def.maxScore,
+          maxScore: scaleMaxScore(def, ctx.sex),
           appliedAt: toDateTime(date),
           answers: answers as object,
-          interpretation: def.interpret(score).label,
+          interpretation: def.interpret(score, ctx).label,
           notes: typeof notes === "string" && notes.trim() ? notes.trim() : null,
           createdById: req.user!.id,
         },

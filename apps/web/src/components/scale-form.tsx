@@ -5,8 +5,12 @@ import { useRouter } from "next/navigation";
 import {
   formatDate,
   isValidDateString,
+  optionPoints,
+  partialScaleScore,
+  scaleMaxScore,
   type ScaleAnswers,
   type ScaleDefinition,
+  type Sex,
 } from "@geriatria/schemas";
 import { useApplyScale } from "@/lib/scales";
 import { ApiError } from "@/lib/api";
@@ -23,11 +27,23 @@ import { LEVEL_BADGE } from "@/lib/scale-ui";
 import { scrollToFirstError } from "@/lib/scroll-to-error";
 import { cn } from "@/lib/utils";
 
-export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDefinition }) {
+export function ScaleForm({
+  patientId,
+  def,
+  sex,
+}: {
+  patientId: string;
+  def: ScaleDefinition;
+  /** Sexo del paciente: lo usan las escalas dependientes del sexo (Lawton). */
+  sex?: Sex;
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const apply = useApplyScale(patientId);
 
+  // En "options" guardamos el ÍNDICE de la opción elegida (no los puntos), para
+  // preservar el nivel exacto y poder puntuar según el sexo. En "range"/"number"
+  // guardamos el valor directamente.
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [date, setDate] = useState(formatDate(new Date()));
   const [notes, setNotes] = useState("");
@@ -35,7 +51,8 @@ export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDef
 
   const answeredCount = def.questions.filter((q) => answers[q.id] !== undefined).length;
   const complete = answeredCount === def.questions.length;
-  const partialScore = Object.values(answers).reduce((a, b) => a + b, 0);
+  const partialScore = partialScaleScore(def, answers as ScaleAnswers, { sex });
+  const maxScore = scaleMaxScore(def, sex);
 
   function setAnswer(qid: string, value: number | undefined) {
     setAnswers((prev) => {
@@ -133,7 +150,7 @@ export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDef
                         key={oi}
                         className={cn(
                           "flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 text-base transition-colors",
-                          value === opt.value
+                          value === oi
                             ? "border-primary bg-primary/5"
                             : "border-border hover:bg-muted",
                         )}
@@ -141,12 +158,14 @@ export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDef
                         <input
                           type="radio"
                           name={q.id}
-                          checked={value === opt.value}
-                          onChange={() => setAnswer(q.id, opt.value)}
+                          checked={value === oi}
+                          onChange={() => setAnswer(q.id, oi)}
                           className="h-4 w-4 accent-primary"
                         />
                         <span className="flex-1">{opt.label}</span>
-                        <span className="tabular-nums text-sm text-muted-foreground">{opt.value}</span>
+                        <span className="tabular-nums text-sm text-muted-foreground">
+                          {optionPoints(opt, sex)}
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -215,11 +234,11 @@ export function ScaleForm({ patientId, def }: { patientId: string; def: ScaleDef
         <div>
           <span className="font-heading text-xl font-semibold tabular-nums">
             {partialScore}
-            <span className="text-base font-normal text-muted-foreground"> / {def.maxScore}</span>
+            <span className="text-base font-normal text-muted-foreground"> / {maxScore}</span>
           </span>
           {complete ? (
-            <Badge variant={LEVEL_BADGE[def.interpret(partialScore).level]} className="ml-3">
-              {def.interpret(partialScore).label}
+            <Badge variant={LEVEL_BADGE[def.interpret(partialScore, { sex }).level]} className="ml-3">
+              {def.interpret(partialScore, { sex }).label}
             </Badge>
           ) : (
             <span className="ml-3 text-sm text-muted-foreground">

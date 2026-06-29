@@ -383,6 +383,8 @@ model VitalSign {
   height            Float? // talla (cm)
   bmi               Float? // IMC (calculado)
   calfCircumference Float? // circunferencia de pantorrilla (cm)
+  bloodGlucose      Int? // glicemia capilar (mg/dL)
+  gripStrength      Float? // fuerza de agarre / dinamómetro (kg)
   notes             String?
 
   createdAt   DateTime @default(now())

@@ -44,6 +44,8 @@ export default function VitalesPage() {
     { key: "height", header: "Talla", sortable: true, align: "right", render: (v) => num(v.height) },
     { key: "bmi", header: "IMC", sortable: true, align: "right", render: (v) => num(v.bmi) },
     { key: "calfCircumference", header: "C. pant.", sortable: true, align: "right", render: (v) => num(v.calfCircumference) },
+    { key: "bloodGlucose", header: "Glicemia", sortable: true, align: "right", render: (v) => num(v.bloodGlucose) },
+    { key: "gripStrength", header: "F. agarre", sortable: true, align: "right", render: (v) => num(v.gripStrength) },
   ];
 
   return (

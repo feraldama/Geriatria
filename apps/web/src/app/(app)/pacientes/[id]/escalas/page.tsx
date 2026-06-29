@@ -9,10 +9,12 @@ import {
   SCALE_CATEGORIES,
   SCALE_DEFINITIONS,
   PERMISSIONS,
+  scaleMaxScore,
   type AssessmentScaleItem,
   type ScaleType,
 } from "@geriatria/schemas";
 import { useScales } from "@/lib/scales";
+import { usePatient } from "@/lib/patients";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { PatientSubHeader } from "@/components/patient-subheader";
 import { buttonVariants } from "@/components/ui/button";
@@ -25,6 +27,8 @@ import { cn } from "@/lib/utils";
 export default function EscalasPage() {
   const { id } = useParams<{ id: string }>();
   const { data: scales, isLoading, isError } = useScales(id);
+  const { data: patient } = usePatient(id);
+  const sex = patient?.sex;
   const { data: user } = useCurrentUser();
   const canWrite = hasPermission(user, PERMISSIONS.CLINICAL_WRITE);
 
@@ -100,7 +104,7 @@ export default function EscalasPage() {
                           </span>
                         </span>
                         {latest.interpretation && (
-                          <Badge variant={LEVEL_BADGE[def.interpret(latest.score).level]}>
+                          <Badge variant={LEVEL_BADGE[def.interpret(latest.score, { sex }).level]}>
                             {latest.interpretation}
                           </Badge>
                         )}
@@ -112,7 +116,7 @@ export default function EscalasPage() {
                       {points.length >= 2 ? (
                         <LineChart
                           points={points}
-                          max={def.maxScore}
+                          max={scaleMaxScore(def, sex)}
                           ariaLabel={`Evolución de ${def.name}`}
                         />
                       ) : (

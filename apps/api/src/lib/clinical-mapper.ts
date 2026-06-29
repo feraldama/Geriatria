@@ -15,6 +15,8 @@ export function serializeVital(v: {
   height: number | null;
   bmi: number | null;
   calfCircumference: number | null;
+  bloodGlucose: number | null;
+  gripStrength: number | null;
   notes: string | null;
 }): VitalSignItem {
   return {
@@ -30,6 +32,8 @@ export function serializeVital(v: {
     height: v.height,
     bmi: v.bmi,
     calfCircumference: v.calfCircumference,
+    bloodGlucose: v.bloodGlucose,
+    gripStrength: v.gripStrength,
     notes: v.notes,
   };
 }

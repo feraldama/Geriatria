@@ -30,6 +30,8 @@ export const vitalSignSchema = z.object({
   weight: optionalNumber(1, 400, "Valor fuera de rango"),
   height: optionalNumber(30, 250, "Valor fuera de rango"),
   calfCircumference: optionalNumber(10, 80, "Valor fuera de rango"),
+  bloodGlucose: optionalNumber(20, 600, "Valor fuera de rango"),
+  gripStrength: optionalNumber(0, 100, "Valor fuera de rango"),
   notes: z
     .string()
     .trim()
@@ -52,6 +54,8 @@ export interface VitalSignItem {
   height: number | null;
   bmi: number | null;
   calfCircumference: number | null;
+  bloodGlucose: number | null;
+  gripStrength: number | null;
   notes: string | null;
 }
 
@@ -66,6 +70,8 @@ export const VITAL_FIELDS = [
   { key: "height", label: "Talla", unit: "cm" },
   { key: "bmi", label: "IMC", unit: "" },
   { key: "calfCircumference", label: "C. pantorrilla", unit: "cm" },
+  { key: "bloodGlucose", label: "Glicemia capilar", unit: "mg/dL" },
+  { key: "gripStrength", label: "Fuerza de agarre", unit: "kg" },
 ] as const;
 
 /** Calcula el IMC a partir de peso (kg) y talla (cm). Null si falta alguno. */

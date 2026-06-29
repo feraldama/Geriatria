@@ -34,6 +34,8 @@ interface VitalsValues {
   weight: string;
   height: string;
   calfCircumference: string;
+  bloodGlucose: string;
+  gripStrength: string;
 }
 interface FormValues {
   date: string;
@@ -55,6 +57,8 @@ const emptyVitals: VitalsValues = {
   weight: "",
   height: "",
   calfCircumference: "",
+  bloodGlucose: "",
+  gripStrength: "",
 };
 
 interface ConsultationFormProps {
@@ -224,6 +228,8 @@ export function ConsultationForm({ patientId, appointmentId, initial }: Consulta
           {vitalNum("weight", "Peso", "kg", "0.1")}
           {vitalNum("height", "Talla", "cm", "0.1")}
           {vitalNum("calfCircumference", "C. pantorrilla", "cm", "0.1")}
+          {vitalNum("bloodGlucose", "Glicemia capilar", "mg/dL")}
+          {vitalNum("gripStrength", "Fuerza de agarre", "kg", "0.1")}
           <Field label="IMC (calculado)" htmlFor="v-bmi">
             <Input id="v-bmi" value={bmi ?? ""} readOnly placeholder="—" className="bg-muted/40" />
           </Field>
