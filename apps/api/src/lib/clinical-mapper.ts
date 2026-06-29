@@ -1,6 +1,6 @@
 /** Serialización de consultas y signos vitales a los tipos de salida. */
 import type { Prisma } from "@prisma/client";
-import type { ConsultationItem, VitalSignItem } from "@geriatria/schemas";
+import { sanitizePhysicalExam, type ConsultationItem, type VitalSignItem } from "@geriatria/schemas";
 
 export function serializeVital(v: {
   id: string;
@@ -50,6 +50,10 @@ export function serializeConsultation(c: ConsultationWithVitals): ConsultationIt
     objective: c.objective,
     assessment: c.assessment,
     plan: c.plan,
+    physicalExam: (() => {
+      const exam = sanitizePhysicalExam(c.physicalExam);
+      return Object.keys(exam).length ? exam : null;
+    })(),
     vitalSigns: c.vitalSigns.map(serializeVital),
   };
 }

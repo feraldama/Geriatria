@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Activity, Pencil } from "lucide-react";
-import { formatDateTime, PERMISSIONS, type VitalSignItem } from "@geriatria/schemas";
+import {
+  formatDateTime,
+  PERMISSIONS,
+  PHYSICAL_EXAM_GROUPS,
+  type PhysicalExam,
+  type VitalSignItem,
+} from "@geriatria/schemas";
 import { useConsultation } from "@/lib/clinical";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { buttonVariants } from "@/components/ui/button";
@@ -42,6 +48,37 @@ function VitalsSummary({ v }: { v: VitalSignItem }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+// Muestra el examen estructurado: solo grupos con algún campo completado.
+function PhysicalExamView({ exam }: { exam: PhysicalExam }) {
+  const groups = PHYSICAL_EXAM_GROUPS.map((g) => ({
+    title: g.title,
+    fields: g.fields.filter((f) => exam[f.id]),
+  })).filter((g) => g.fields.length > 0);
+  if (groups.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Examen físico / neurológico</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {groups.map((g) => (
+          <div key={g.title}>
+            <p className="mb-1 text-sm font-semibold text-muted-foreground">{g.title}</p>
+            <dl className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+              {g.fields.map((f) => (
+                <div key={f.id} className="flex flex-col">
+                  <dt className="text-sm text-muted-foreground">{f.label}</dt>
+                  <dd className="whitespace-pre-wrap">{exam[f.id]}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -88,6 +125,8 @@ export default function ConsultaDetallePage() {
           <SoapBlock label="Plan" value={c.plan} />
         </CardContent>
       </Card>
+
+      {c.physicalExam && <PhysicalExamView exam={c.physicalExam} />}
 
       {c.vitalSigns.length > 0 && (
         <Card>

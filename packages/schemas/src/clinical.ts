@@ -3,6 +3,7 @@
  */
 import { z } from "zod";
 import { isValidDateString, isValidTimeString } from "./date";
+import { physicalExamSchema, type PhysicalExam } from "./exam";
 
 // ─── Signos vitales ──────────────────────────────────────────────────────────
 
@@ -95,6 +96,8 @@ export const consultationSchema = z.object({
   objective: z.string().trim().max(5000).optional().transform((v) => (v === "" || v === undefined ? null : v)),
   assessment: z.string().trim().max(5000).optional().transform((v) => (v === "" || v === undefined ? null : v)),
   plan: z.string().trim().max(5000).optional().transform((v) => (v === "" || v === undefined ? null : v)),
+  // Examen físico/neurológico estructurado (opcional): mapa campo→texto.
+  physicalExam: physicalExamSchema,
   // Signos vitales tomados en la consulta (opcional, embebidos).
   vitals: vitalSignSchema.partial().optional(),
 });
@@ -112,12 +115,18 @@ export interface ConsultationItem {
   objective: string | null;
   assessment: string | null;
   plan: string | null;
+  physicalExam: PhysicalExam | null;
   vitalSigns: VitalSignItem[];
 }
 
 // ─── Línea de tiempo ──────────────────────────────────────────────────────
 
-export type TimelineEventType = "consultation" | "appointment" | "scale";
+export type TimelineEventType =
+  | "consultation"
+  | "appointment"
+  | "scale"
+  | "syndrome"
+  | "language";
 
 export interface TimelineEvent {
   id: string;

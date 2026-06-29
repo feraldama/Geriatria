@@ -22,6 +22,8 @@ export function PatientTabs({ patientId }: { patientId: string }) {
     { href: `${base}/medicacion`, label: "Medicación", show: canClinical },
     { href: `${base}/vitales`, label: "Signos vitales", show: canClinical },
     { href: `${base}/escalas`, label: "Escalas", show: canClinical },
+    { href: `${base}/lenguaje`, label: "Lenguaje", show: canClinical },
+    { href: `${base}/sindromes`, label: "Síndromes", show: canClinical },
     { href: `${base}/vacunacion`, label: "Vacunación", show: canClinical },
     { href: `${base}/plan-cuidados`, label: "Plan de cuidados", show: canClinical },
     { href: `${base}/documentos`, label: "Documentos", show: canClinical },

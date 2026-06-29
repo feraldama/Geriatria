@@ -231,6 +231,8 @@ model Patient {
   documents     Document[]
   scales        AssessmentScale[]
   vaccinations  Vaccination[]
+  syndromeAssessments SyndromeAssessment[]
+  languageAssessments LanguageAssessment[]
   carePlan      CarePlan?
 
   createdAt DateTime  @default(now())
@@ -346,9 +348,12 @@ model Consultation {
 
   date       DateTime @default(now())
   subjective String?  @db.Text // S: relato del paciente
-  objective  String?  @db.Text // O: examen / hallazgos
+  objective  String?  @db.Text // O: examen / hallazgos (texto libre)
   assessment String?  @db.Text // A: análisis / evaluación
   plan       String?  @db.Text // P: plan / indicaciones
+
+  // Examen físico/neurológico estructurado: { campoId: texto }.
+  physicalExam Json?
 
   vitalSigns VitalSign[]
 
@@ -487,6 +492,52 @@ model AssessmentScale {
 
   @@index([patientId])
   @@index([type])
+  @@index([deletedAt])
+}
+
+// Evaluación de síndromes geriátricos: foto fechada con los síndromes
+// presentes ese día (la más reciente = estado actual del paciente).
+model SyndromeAssessment {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  assessedAt DateTime @default(now())
+  present    Json // claves de síndromes presentes: string[]
+  notes      String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+
+  @@index([patientId])
+  @@index([assessedAt])
+  @@index([deletedAt])
+}
+
+// Evaluación de lenguaje/cognición con láminas: nominación de imágenes,
+// repetición de frases y descripción de escena.
+model LanguageAssessment {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  assessedAt       DateTime @default(now())
+  naming           Json // acierto por objeto: boolean[]
+  phrases          Json // acierto por frase: boolean[]
+  descriptionNotes String?  @db.Text
+  notes            String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+
+  @@index([patientId])
+  @@index([assessedAt])
   @@index([deletedAt])
 }
 

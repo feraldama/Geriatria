@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FileText, CalendarDays, ClipboardList } from "lucide-react";
+import { FileText, CalendarDays, ClipboardList, Stethoscope, MessageSquare } from "lucide-react";
 import { formatDateTime, type TimelineEvent } from "@geriatria/schemas";
 import { useTimeline } from "@/lib/clinical";
 import { PatientSubHeader } from "@/components/patient-subheader";
@@ -39,13 +39,21 @@ export default function LineaTiempoPage() {
                 ? FileText
                 : e.type === "scale"
                   ? ClipboardList
-                  : CalendarDays;
+                  : e.type === "syndrome"
+                    ? Stethoscope
+                    : e.type === "language"
+                      ? MessageSquare
+                      : CalendarDays;
             const href =
               e.type === "consultation"
                 ? `/pacientes/${id}/consultas/${e.id}`
                 : e.type === "scale"
                   ? `/pacientes/${id}/escalas/${e.id}`
-                  : `/agenda?view=dia&date=${localDate}`;
+                  : e.type === "syndrome"
+                    ? `/pacientes/${id}/sindromes/${e.id}`
+                    : e.type === "language"
+                      ? `/pacientes/${id}/lenguaje/${e.id}`
+                      : `/agenda?view=dia&date=${localDate}`;
             return (
               <li key={`${e.type}-${e.id}`} className="relative">
                 {/* Punto en la línea */}

@@ -10,11 +10,15 @@ import {
   DEPENDENCY_LEVEL_LABELS,
   MEDICATION_ROUTE_LABELS,
   SCALE_DEFINITIONS,
+  syndromeLabel,
+  PHYSICAL_EXAM_GROUPS,
   type AssessmentScaleItem,
 } from "@geriatria/schemas";
 import { usePatient } from "@/lib/patients";
 import { useMedications } from "@/lib/medications";
 import { useScales } from "@/lib/scales";
+import { useSyndromes } from "@/lib/syndromes";
+import { useConsultations } from "@/lib/clinical";
 import { useCarePlan } from "@/lib/extras";
 
 /**
@@ -27,11 +31,18 @@ export default function ResumenImprimiblePage() {
   const { data: p } = usePatient(id);
   const { data: meds } = useMedications(id);
   const { data: scales } = useScales(id);
+  const { data: syndromes } = useSyndromes(id);
+  const { data: consultations } = useConsultations(id);
   const { data: carePlan } = useCarePlan(id);
 
   if (!p) return <p className="p-8 text-muted-foreground">Cargando…</p>;
 
   const activeMeds = (meds ?? []).filter((m) => m.status === "ACTIVA");
+  const latestSyndromes = syndromes?.[0];
+  // Examen estructurado de la consulta más reciente que tenga datos.
+  const examConsult = (consultations ?? []).find(
+    (c) => c.physicalExam && Object.keys(c.physicalExam).length > 0,
+  );
 
   // Última escala aplicada por tipo.
   const latestByType = new Map<string, AssessmentScaleItem>();
@@ -133,6 +144,41 @@ export default function ResumenImprimiblePage() {
               </li>
             ))}
           </ul>
+        </Section>
+      )}
+
+      {latestSyndromes && (
+        <Section title={`Síndromes geriátricos (${formatDate(latestSyndromes.assessedAt)})`}>
+          {latestSyndromes.present.length === 0 ? (
+            <p className="text-muted-foreground">Sin síndromes marcados.</p>
+          ) : (
+            <ul className="list-disc pl-5">
+              {latestSyndromes.present.map((k) => (
+                <li key={k}>{syndromeLabel(k)}</li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
+
+      {examConsult?.physicalExam && (
+        <Section title={`Examen físico / neurológico (${formatDate(examConsult.date)})`}>
+          {PHYSICAL_EXAM_GROUPS.map((g) => {
+            const fields = g.fields.filter((f) => examConsult.physicalExam![f.id]);
+            if (fields.length === 0) return null;
+            return (
+              <div key={g.key} className="mb-2">
+                <p className="text-sm font-semibold text-muted-foreground">{g.title}</p>
+                <ul className="list-disc pl-5 text-sm">
+                  {fields.map((f) => (
+                    <li key={f.id}>
+                      <span className="font-medium">{f.label}:</span> {examConsult.physicalExam![f.id]}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </Section>
       )}
 

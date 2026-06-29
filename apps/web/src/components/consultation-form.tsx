@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, Controller, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,6 +9,7 @@ import {
   formatDate,
   formatTime,
   calculateBMI,
+  PHYSICAL_EXAM_GROUPS,
   type ConsultationInput,
   type ConsultationItem,
 } from "@geriatria/schemas";
@@ -75,6 +77,11 @@ export function ConsultationForm({ patientId, appointmentId, initial }: Consulta
   const update = useUpdateConsultation(patientId, initial?.id ?? "");
   const mutation = isEdit ? update : create;
 
+  // Examen físico/neurológico estructurado (fuera de RHF: ~40 campos de texto).
+  const [exam, setExam] = useState<Record<string, string>>(initial?.physicalExam ?? {});
+  const setExamField = (id: string, value: string) =>
+    setExam((prev) => ({ ...prev, [id]: value }));
+
   const now = new Date();
   const {
     register,
@@ -115,17 +122,18 @@ export function ConsultationForm({ patientId, appointmentId, initial }: Consulta
   const submit = handleSubmit(async (data) => {
     try {
       if (isEdit) {
-        // En edición solo se actualiza el SOAP y la fecha (los vitales se
-        // gestionan en su propia sección).
+        // En edición se actualiza el SOAP, la fecha y el examen estructurado
+        // (los vitales se gestionan en su propia sección).
         const { vitals: _vitals, ...soap } = data;
         void _vitals;
-        await update.mutateAsync(soap as unknown as ConsultationInput);
+        await update.mutateAsync({ ...soap, physicalExam: exam } as unknown as ConsultationInput);
         toast("Consulta actualizada");
         router.replace(`/pacientes/${patientId}/consultas/${initial!.id}`);
       } else {
         const payload = {
           ...data,
           appointmentId: appointmentId ?? null,
+          physicalExam: exam,
         } as unknown as ConsultationInput;
         const res = await create.mutateAsync(payload);
         toast("Consulta registrada");
@@ -208,6 +216,45 @@ export function ConsultationForm({ patientId, appointmentId, initial }: Consulta
           <Field label="Plan" htmlFor="plan" hint="Indicaciones, estudios y próximos controles">
             <Textarea id="plan" rows={3} {...register("plan")} />
           </Field>
+        </CardContent>
+      </Card>
+
+      {/* Examen físico/neurológico estructurado (opcional): complementa el
+          "Objetivo" libre del SOAP. Colapsado por defecto. */}
+      <Card>
+        <CardContent className="p-0">
+          <details className="group">
+            <summary className="flex cursor-pointer items-center justify-between gap-2 px-6 py-4 font-heading text-base font-semibold">
+              Examen físico / neurológico estructurado (opcional)
+              <span className="text-sm font-normal text-muted-foreground group-open:hidden">
+                Mostrar
+              </span>
+              <span className="hidden text-sm font-normal text-muted-foreground group-open:inline">
+                Ocultar
+              </span>
+            </summary>
+            <div className="flex flex-col gap-6 px-6 pb-6">
+              {PHYSICAL_EXAM_GROUPS.map((g) => (
+                <fieldset key={g.key} className="flex flex-col gap-3">
+                  <legend className="mb-1 text-sm font-semibold text-muted-foreground">
+                    {g.title}
+                  </legend>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {g.fields.map((f) => (
+                      <Field key={f.id} label={f.label} htmlFor={`ex-${f.id}`}>
+                        <Textarea
+                          id={`ex-${f.id}`}
+                          rows={2}
+                          value={exam[f.id] ?? ""}
+                          onChange={(e) => setExamField(f.id, e.target.value)}
+                        />
+                      </Field>
+                    ))}
+                  </div>
+                </fieldset>
+              ))}
+            </div>
+          </details>
         </CardContent>
       </Card>
 

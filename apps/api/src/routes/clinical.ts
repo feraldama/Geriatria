@@ -22,8 +22,21 @@ import {
   vaccinationSchema,
   updateVaccinationSchema,
   carePlanSchema,
+  syndromeAssessmentSchema,
+  sanitizeSyndromeKeys,
+  sanitizePhysicalExam,
+  cognitionAssessmentSchema,
+  sanitizeBoolArray,
+  countCorrect,
+  NAMING_ITEM_COUNT,
+  REPETITION_PHRASES,
   type VaccinationItem,
   type CarePlanItem,
+  type SyndromeAssessmentItem,
+  type SyndromeAssessmentInput,
+  type SyndromeKey,
+  type CognitionAssessmentItem,
+  type CognitionAssessmentInput,
   APPOINTMENT_TYPE_LABELS,
   APPOINTMENT_STATUS_LABELS,
   PERMISSIONS,
@@ -148,9 +161,10 @@ clinicalRouter.post(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
-      const { date, time, appointmentId, subjective, objective, assessment, plan, vitals } =
+      const { date, time, appointmentId, subjective, objective, assessment, plan, physicalExam, vitals } =
         req.body;
       const when = toDateTime(date, time);
+      const exam = sanitizePhysicalExam(physicalExam);
 
       // Si se vincula a una cita, debe ser del paciente y no estar ya usada.
       if (appointmentId) {
@@ -172,6 +186,7 @@ clinicalRouter.post(
             objective,
             assessment,
             plan,
+            physicalExam: Object.keys(exam).length ? exam : undefined,
             createdById: req.user!.id,
           },
         });
@@ -222,13 +237,14 @@ clinicalRouter.patch(
       });
       if (!existing) throw notFound("Consulta no encontrada");
 
-      const { date, time, subjective, objective, assessment, plan } = req.body;
+      const { date, time, subjective, objective, assessment, plan, physicalExam } = req.body;
       const data: Prisma.ConsultationUpdateInput = {};
       if (date !== undefined) data.date = toDateTime(date, time);
       if (subjective !== undefined) data.subjective = subjective;
       if (objective !== undefined) data.objective = objective;
       if (assessment !== undefined) data.assessment = assessment;
       if (plan !== undefined) data.plan = plan;
+      if (physicalExam !== undefined) data.physicalExam = sanitizePhysicalExam(physicalExam);
 
       const updated = await prisma.consultation.update({
         where: { id: cid },
@@ -319,7 +335,7 @@ clinicalRouter.get(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
-      const [consultations, appointments, scales] = await Promise.all([
+      const [consultations, appointments, scales, syndromes, languages] = await Promise.all([
         prisma.consultation.findMany({
           where: { patientId, deletedAt: null },
           orderBy: { date: "desc" },
@@ -331,6 +347,14 @@ clinicalRouter.get(
         prisma.assessmentScale.findMany({
           where: { patientId, deletedAt: null },
           orderBy: { appliedAt: "desc" },
+        }),
+        prisma.syndromeAssessment.findMany({
+          where: { patientId, deletedAt: null },
+          orderBy: { assessedAt: "desc" },
+        }),
+        prisma.languageAssessment.findMany({
+          where: { patientId, deletedAt: null },
+          orderBy: { assessedAt: "desc" },
         }),
       ]);
 
@@ -357,6 +381,27 @@ clinicalRouter.get(
           title: `Escala · ${getScaleDefinition(s.type)?.name ?? s.type}`,
           detail: `${s.score}/${s.maxScore}${s.interpretation ? ` · ${s.interpretation}` : ""}`,
         })),
+        ...syndromes.map((s) => {
+          const present = sanitizeSyndromeKeys(s.present);
+          return {
+            id: s.id,
+            type: "syndrome" as const,
+            date: s.assessedAt.toISOString(),
+            title: "Síndromes geriátricos",
+            detail: present.length ? `${present.length} síndrome(s) presente(s)` : "Sin síndromes marcados",
+          };
+        }),
+        ...languages.map((l) => {
+          const naming = countCorrect(sanitizeBoolArray(l.naming, NAMING_ITEM_COUNT));
+          const phrases = countCorrect(sanitizeBoolArray(l.phrases, REPETITION_PHRASES.length));
+          return {
+            id: l.id,
+            type: "language" as const,
+            date: l.assessedAt.toISOString(),
+            title: "Lenguaje y cognición",
+            detail: `Nominación ${naming}/${NAMING_ITEM_COUNT} · Repetición ${phrases}/${REPETITION_PHRASES.length}`,
+          };
+        }),
       ].sort((x, y) => y.date.localeCompare(x.date));
 
       res.json({ data: events });
@@ -697,6 +742,236 @@ clinicalRouter.post(
         req,
       });
       res.status(201).json({ scale: serializeScale(created, true) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ─── Síndromes geriátricos ─────────────────────────────────────────────────
+
+function serializeSyndrome(s: {
+  id: string;
+  assessedAt: Date;
+  present: unknown;
+  notes: string | null;
+}): SyndromeAssessmentItem {
+  return {
+    id: s.id,
+    assessedAt: s.assessedAt.toISOString(),
+    present: sanitizeSyndromeKeys(s.present),
+    notes: s.notes,
+  };
+}
+
+// GET /:patientId/syndromes  → evaluaciones de síndromes (más reciente primero).
+clinicalRouter.get(
+  "/:patientId/syndromes",
+  requirePermission(PERMISSIONS.CLINICAL_READ),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const items = await prisma.syndromeAssessment.findMany({
+        where: { patientId, deletedAt: null },
+        orderBy: { assessedAt: "desc" },
+      });
+      res.json({ data: items.map(serializeSyndrome) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /:patientId/syndromes/:sid  → detalle de una evaluación.
+clinicalRouter.get(
+  "/:patientId/syndromes/:sid",
+  requirePermission(PERMISSIONS.CLINICAL_READ),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const item = await prisma.syndromeAssessment.findFirst({
+        where: { id: String(req.params.sid), patientId, deletedAt: null },
+      });
+      if (!item) throw notFound("Evaluación no encontrada");
+      res.json({ assessment: serializeSyndrome(item) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// POST /:patientId/syndromes  → registra una evaluación fechada.
+clinicalRouter.post(
+  "/:patientId/syndromes",
+  requirePermission(PERMISSIONS.CLINICAL_WRITE),
+  validateBody(syndromeAssessmentSchema),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const body = req.body as SyndromeAssessmentInput;
+      const present: SyndromeKey[] = sanitizeSyndromeKeys(body.present);
+
+      const created = await prisma.syndromeAssessment.create({
+        data: {
+          patientId,
+          assessedAt: toDateTime(body.date),
+          present,
+          notes: body.notes ?? null,
+          createdById: req.user!.id,
+        },
+      });
+      await recordAudit({
+        userId: req.user!.id,
+        action: "syndrome.create",
+        resource: "syndrome",
+        resourceId: created.id,
+        req,
+      });
+      res.status(201).json({ assessment: serializeSyndrome(created) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// DELETE /:patientId/syndromes/:sid  → borrado lógico.
+clinicalRouter.delete(
+  "/:patientId/syndromes/:sid",
+  requirePermission(PERMISSIONS.CLINICAL_WRITE),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const sid = String(req.params.sid);
+      const item = await prisma.syndromeAssessment.findFirst({
+        where: { id: sid, patientId, deletedAt: null },
+      });
+      if (!item) throw notFound("Evaluación no encontrada");
+      await prisma.syndromeAssessment.update({ where: { id: sid }, data: { deletedAt: new Date() } });
+      await recordAudit({
+        userId: req.user!.id,
+        action: "syndrome.delete",
+        resource: "syndrome",
+        resourceId: sid,
+        req,
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ─── Lenguaje y cognición (láminas) ────────────────────────────────────────
+
+function serializeLanguage(l: {
+  id: string;
+  assessedAt: Date;
+  naming: unknown;
+  phrases: unknown;
+  descriptionNotes: string | null;
+  notes: string | null;
+}): CognitionAssessmentItem {
+  const naming = sanitizeBoolArray(l.naming, NAMING_ITEM_COUNT);
+  const phrases = sanitizeBoolArray(l.phrases, REPETITION_PHRASES.length);
+  return {
+    id: l.id,
+    assessedAt: l.assessedAt.toISOString(),
+    naming,
+    phrases,
+    namingScore: countCorrect(naming),
+    phraseScore: countCorrect(phrases),
+    descriptionNotes: l.descriptionNotes,
+    notes: l.notes,
+  };
+}
+
+clinicalRouter.get(
+  "/:patientId/language",
+  requirePermission(PERMISSIONS.CLINICAL_READ),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const items = await prisma.languageAssessment.findMany({
+        where: { patientId, deletedAt: null },
+        orderBy: { assessedAt: "desc" },
+      });
+      res.json({ data: items.map(serializeLanguage) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+clinicalRouter.get(
+  "/:patientId/language/:lid",
+  requirePermission(PERMISSIONS.CLINICAL_READ),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const item = await prisma.languageAssessment.findFirst({
+        where: { id: String(req.params.lid), patientId, deletedAt: null },
+      });
+      if (!item) throw notFound("Evaluación no encontrada");
+      res.json({ assessment: serializeLanguage(item) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+clinicalRouter.post(
+  "/:patientId/language",
+  requirePermission(PERMISSIONS.CLINICAL_WRITE),
+  validateBody(cognitionAssessmentSchema),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const body = req.body as CognitionAssessmentInput;
+      const created = await prisma.languageAssessment.create({
+        data: {
+          patientId,
+          assessedAt: toDateTime(body.date),
+          naming: sanitizeBoolArray(body.naming, NAMING_ITEM_COUNT),
+          phrases: sanitizeBoolArray(body.phrases, REPETITION_PHRASES.length),
+          descriptionNotes: body.descriptionNotes ?? null,
+          notes: body.notes ?? null,
+          createdById: req.user!.id,
+        },
+      });
+      await recordAudit({
+        userId: req.user!.id,
+        action: "language.create",
+        resource: "language",
+        resourceId: created.id,
+        req,
+      });
+      res.status(201).json({ assessment: serializeLanguage(created) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+clinicalRouter.delete(
+  "/:patientId/language/:lid",
+  requirePermission(PERMISSIONS.CLINICAL_WRITE),
+  async (req, res, next) => {
+    try {
+      const patientId = await ensurePatient(String(req.params.patientId));
+      const lid = String(req.params.lid);
+      const item = await prisma.languageAssessment.findFirst({
+        where: { id: lid, patientId, deletedAt: null },
+      });
+      if (!item) throw notFound("Evaluación no encontrada");
+      await prisma.languageAssessment.update({ where: { id: lid }, data: { deletedAt: new Date() } });
+      await recordAudit({
+        userId: req.user!.id,
+        action: "language.delete",
+        resource: "language",
+        resourceId: lid,
+        req,
+      });
+      res.json({ ok: true });
     } catch (err) {
       next(err);
     }
