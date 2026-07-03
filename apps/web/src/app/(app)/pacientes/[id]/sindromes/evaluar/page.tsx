@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { formatDate, isValidDateString, GERIATRIC_SYNDROMES } from "@geriatria/schemas";
+import {
+  formatDate,
+  isValidDateString,
+  GERIATRIC_SYNDROMES,
+  GDS_FAST_STAGES,
+} from "@geriatria/schemas";
 import { useSyndromes, useApplySyndrome } from "@/lib/syndromes";
 import { ApiError } from "@/lib/api";
 import { PatientSubHeader } from "@/components/patient-subheader";
@@ -25,6 +30,7 @@ export default function EvaluarSindromesPage() {
   const { data: assessments } = useSyndromes(id);
 
   const [present, setPresent] = useState<Set<string>>(new Set());
+  const [gdsStage, setGdsStage] = useState<number | null>(null);
   const [date, setDate] = useState(formatDate(new Date()));
   const [notes, setNotes] = useState("");
   const [showErrors, setShowErrors] = useState(false);
@@ -35,7 +41,10 @@ export default function EvaluarSindromesPage() {
   useEffect(() => {
     if (prefilled || !assessments) return;
     const latest = assessments[0];
-    if (latest) setPresent(new Set(latest.present));
+    if (latest) {
+      setPresent(new Set(latest.present));
+      setGdsStage(latest.gdsStage ?? null);
+    }
     setPrefilled(true);
   }, [assessments, prefilled]);
 
@@ -56,6 +65,7 @@ export default function EvaluarSindromesPage() {
       await apply.mutateAsync({
         date,
         present: [...present],
+        gdsStage,
         notes: notes.trim() || undefined,
       });
       toast("Evaluación de síndromes registrada");
@@ -130,6 +140,63 @@ export default function EvaluarSindromesPage() {
                     className="h-4 w-4 accent-primary"
                   />
                   <span className="flex-1">{s.label}</span>
+                </label>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Escala de Deterioro Global (GDS-FAST)</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-1.5">
+            <p className="mb-1 text-sm text-muted-foreground">
+              Estadiaje del deterioro cognitivo global (opcional). Seleccioná un estadio.
+            </p>
+            <label
+              className={cn(
+                "flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 text-base transition-colors",
+                gdsStage === null
+                  ? "border-primary bg-primary/5 font-medium"
+                  : "border-border hover:bg-muted",
+              )}
+            >
+              <input
+                type="radio"
+                name="gds"
+                checked={gdsStage === null}
+                onChange={() => setGdsStage(null)}
+                className="h-4 w-4 accent-primary"
+              />
+              <span className="flex-1">Sin estadiar</span>
+            </label>
+            {GDS_FAST_STAGES.map((g) => {
+              const on = gdsStage === g.stage;
+              return (
+                <label
+                  key={g.stage}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 text-base transition-colors",
+                    on ? "border-primary bg-primary/5" : "border-border hover:bg-muted",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="gds"
+                    checked={on}
+                    onChange={() => setGdsStage(g.stage)}
+                    className="mt-1 h-4 w-4 accent-primary"
+                  />
+                  <span className="flex-1">
+                    <span className="font-medium">
+                      GDS {g.stage} · {g.title}
+                    </span>
+                    <span className="block text-sm text-muted-foreground">
+                      {g.phase} · MEC {g.mec}
+                    </span>
+                    <span className="block text-sm text-muted-foreground">{g.summary}</span>
+                  </span>
                 </label>
               );
             })}

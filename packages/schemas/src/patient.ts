@@ -58,6 +58,33 @@ export const HABIT_STATUS_LABELS: Record<HabitStatus, string> = {
   ACTIVO: "Activo",
 };
 
+// Nivel de escolaridad. Es relevante en clínica: MMSE, MoCA y Pfeiffer se
+// interpretan/ajustan según los años de estudio del paciente.
+export const EDUCATION_LEVEL = [
+  "NINGUNA",
+  "PRIMARIA",
+  "SECUNDARIA",
+  "TERCIARIA",
+  "UNIVERSITARIA",
+] as const;
+export type EducationLevel = (typeof EDUCATION_LEVEL)[number];
+export const EDUCATION_LEVEL_LABELS: Record<EducationLevel, string> = {
+  NINGUNA: "Sin estudios",
+  PRIMARIA: "Primaria",
+  SECUNDARIA: "Secundaria",
+  TERCIARIA: "Terciaria / técnica",
+  UNIVERSITARIA: "Universitaria",
+};
+
+// Nivel de actividad física (hábito).
+export const EXERCISE_LEVEL = ["SEDENTARIO", "OCASIONAL", "REGULAR"] as const;
+export type ExerciseLevel = (typeof EXERCISE_LEVEL)[number];
+export const EXERCISE_LEVEL_LABELS: Record<ExerciseLevel, string> = {
+  SEDENTARIO: "Sedentario (no realiza)",
+  OCASIONAL: "Ocasional",
+  REGULAR: "Regular",
+};
+
 export const ALLERGY_SEVERITY = ["LEVE", "MODERADA", "SEVERA"] as const;
 export type AllergySeverity = (typeof ALLERGY_SEVERITY)[number];
 export const ALLERGY_SEVERITY_LABELS: Record<AllergySeverity, string> = {
@@ -89,6 +116,20 @@ function optionalEnum<T extends readonly [string, ...string[]]>(values: T) {
   return z.preprocess(
     (v) => (v === "" || v === null ? undefined : v),
     z.enum(values).optional(),
+  );
+}
+
+// Entero opcional que acepta "" o ausencia → null. Los formularios mandan
+// strings; se coacciona a número y se valida el rango.
+function optionalInt(min: number, max: number) {
+  return z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
+    z
+      .number()
+      .int("Debe ser un número entero")
+      .min(min)
+      .max(max)
+      .nullable(),
   );
 }
 
@@ -136,6 +177,12 @@ export const createPatientSchema = z.object({
   maritalStatus: optionalEnum(MARITAL_STATUS),
   photoUrl: optionalText(500),
 
+  // Datos sociodemográficos
+  birthPlace: optionalText(160),
+  education: optionalEnum(EDUCATION_LEVEL),
+  educationYears: optionalInt(0, 40),
+  occupation: optionalText(160),
+
   // Contacto
   address: optionalText(255),
   phone: optionalText(40),
@@ -168,6 +215,7 @@ export const createPatientSchema = z.object({
   familyHistory: optionalText(4000),
   smoking: optionalEnum(HABIT_STATUS),
   alcohol: optionalEnum(HABIT_STATUS),
+  physicalExercise: optionalEnum(EXERCISE_LEVEL),
   habitsNotes: optionalText(500),
   notes: optionalText(4000),
 
@@ -223,6 +271,10 @@ export interface PatientDetail {
   sex: Sex;
   maritalStatus: MaritalStatus | null;
   photoUrl: string | null;
+  birthPlace: string | null;
+  education: EducationLevel | null;
+  educationYears: number | null;
+  occupation: string | null;
   address: string | null;
   phone: string | null;
   phoneAlt: string | null;
@@ -240,6 +292,7 @@ export interface PatientDetail {
   familyHistory: string | null;
   smoking: HabitStatus | null;
   alcohol: HabitStatus | null;
+  physicalExercise: ExerciseLevel | null;
   habitsNotes: string | null;
   notes: string | null;
   caregivers: Caregiver[];

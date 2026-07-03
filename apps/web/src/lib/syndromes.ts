@@ -8,6 +8,7 @@ import { api } from "./api";
 export interface ApplySyndromeInput {
   date: string; // dd/mm/aaaa
   present: string[];
+  gdsStage?: number | null; // estadio GDS-FAST (1–7)
   notes?: string;
 }
 

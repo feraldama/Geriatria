@@ -50,6 +50,77 @@ describe("computeScaleScore", () => {
   });
 });
 
+// CAM no suma: aplica el algoritmo de delirium. En PRESENTE_AUSENTE el índice
+// 0 = "Presente" (1 punto) y el índice 1 = "Ausente" (0 puntos).
+describe("CAM (algoritmo de delirium)", () => {
+  const def = () => getScaleDefinition("CAM")!;
+  const PRES = 0;
+  const AUS = 1;
+
+  it("positivo: (1) y (2) y (3 o 4) presentes → 1 = delirium probable", () => {
+    const score = computeScaleScore(def(), {
+      inicio_agudo: PRES,
+      inatencion: PRES,
+      pensamiento_desorganizado: PRES,
+      alteracion_conciencia: AUS,
+    });
+    expect(score).toBe(1);
+    expect(def().interpret(score).level).toBe("bad");
+  });
+
+  it("negativo: sin inatención, aunque haya (3) y (4) → 0", () => {
+    const score = computeScaleScore(def(), {
+      inicio_agudo: PRES,
+      inatencion: AUS,
+      pensamiento_desorganizado: PRES,
+      alteracion_conciencia: PRES,
+    });
+    expect(score).toBe(0);
+    expect(def().interpret(score).level).toBe("good");
+  });
+
+  it("negativo: (1) y (2) pero ni (3) ni (4) → 0", () => {
+    const score = computeScaleScore(def(), {
+      inicio_agudo: PRES,
+      inatencion: PRES,
+      pensamiento_desorganizado: AUS,
+      alteracion_conciencia: AUS,
+    });
+    expect(score).toBe(0);
+  });
+});
+
+describe("T@M (suma de subpruebas /50)", () => {
+  it("suma los puntos de las 5 subpruebas hasta 50", () => {
+    const def = getScaleDefinition("TAM")!;
+    expect(scaleMaxScore(def)).toBe(50);
+    const max = { orientacion: 5, semantica: 5, libre: 10, clave: 10, perceptiva: 20 };
+    expect(computeScaleScore(def, max)).toBe(50);
+    expect(def.interpret(50).level).toBe("good");
+    expect(def.interpret(30).level).toBe("bad");
+  });
+});
+
+describe("ajuste por escolaridad (MoCA y Pfeiffer)", () => {
+  it("MoCA: 25 puntos es DCL, pero con ≤12 años de escolaridad se ajusta a Normal", () => {
+    const def = getScaleDefinition("MOCA")!;
+    expect(def.interpret(25).level).toBe("warning"); // sin dato de escolaridad
+    expect(def.interpret(25, { educationYears: 6 }).level).toBe("good"); // +1 → 26
+    expect(def.interpret(25, { education: "PRIMARIA" }).level).toBe("good");
+    // Con estudios superiores no se ajusta.
+    expect(def.interpret(25, { educationYears: 16 }).level).toBe("warning");
+  });
+
+  it("Pfeiffer: el umbral de 'intacto' se mueve según escolaridad", () => {
+    const def = getScaleDefinition("PFEIFFER")!;
+    // 3 errores: leve con escolaridad media, intacto con baja, aún leve con alta.
+    expect(def.interpret(3).level).toBe("warning");
+    expect(def.interpret(3, { education: "NINGUNA" }).level).toBe("good");
+    expect(def.interpret(1, { education: "UNIVERSITARIA" }).level).toBe("good");
+    expect(def.interpret(2, { education: "UNIVERSITARIA" }).level).toBe("warning");
+  });
+});
+
 describe("interpretación clínica", () => {
   it("Barthel: 90 = dependencia leve (bueno)", () => {
     const i = getScaleDefinition("BARTHEL")!.interpret(90);

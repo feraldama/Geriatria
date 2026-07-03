@@ -15,11 +15,18 @@ export default function EscalaDetallePage() {
   const { data: scale, isLoading, isError } = useScale(id, sid);
   const { data: patient } = usePatient(id);
   const sex = patient?.sex;
+  const ctx = {
+    sex,
+    education: patient?.education,
+    educationYears: patient?.educationYears,
+  };
 
   if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
   if (isError || !scale) return <p className="p-6 text-destructive">No se pudo cargar la escala.</p>;
 
   const def = getScaleDefinition(scale.type);
+  // Escalas por algoritmo (CAM): no mostramos los puntos por ítem (no suman).
+  const showItemPoints = !def?.computeScore;
 
   // Etiqueta legible de cada respuesta. En "options" la respuesta guardada es
   // el índice de la opción; mostramos su texto y los puntos resueltos por sexo.
@@ -57,7 +64,7 @@ export default function EscalaDetallePage() {
             <span className="text-lg font-normal text-muted-foreground"> / {scale.maxScore}</span>
           </span>
           {scale.interpretation && (
-            <Badge variant={def ? LEVEL_BADGE[def.interpret(scale.score, { sex }).level] : "primary"}>
+            <Badge variant={def ? LEVEL_BADGE[def.interpret(scale.score, ctx).level] : "primary"}>
               {scale.interpretation}
             </Badge>
           )}
@@ -77,7 +84,9 @@ export default function EscalaDetallePage() {
                 return (
                   <li key={q.id} className="flex items-center justify-between gap-3 py-2">
                     <span>{a.text}</span>
-                    <span className="shrink-0 tabular-nums text-muted-foreground">{a.value}</span>
+                    {showItemPoints && (
+                      <span className="shrink-0 tabular-nums text-muted-foreground">{a.value}</span>
+                    )}
                   </li>
                 );
               })}

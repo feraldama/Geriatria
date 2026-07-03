@@ -11,6 +11,8 @@ import {
   MARITAL_STATUS_LABELS,
   DEPENDENCY_LEVEL_LABELS,
   HABIT_STATUS_LABELS,
+  EDUCATION_LEVEL_LABELS,
+  EXERCISE_LEVEL_LABELS,
   ALLERGY_SEVERITY_LABELS,
   PERMISSIONS,
   type PatientDetail,
@@ -132,6 +134,32 @@ export default function PacienteDetallePage() {
       )}
 
       <div className="grid gap-6 md:grid-cols-2">
+        {/* Datos personales */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Datos personales</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl>
+              <Row label="Fecha de nacimiento" value={formatDate(p.birthDate)} />
+              <Row label="Lugar de nacimiento" value={p.birthPlace} />
+              <Row label="Ocupación" value={p.occupation} />
+              <Row
+                label="Escolaridad"
+                value={
+                  p.education
+                    ? `${EDUCATION_LEVEL_LABELS[p.education]}${
+                        p.educationYears != null ? ` · ${p.educationYears} años` : ""
+                      }`
+                    : p.educationYears != null
+                      ? `${p.educationYears} años`
+                      : null
+                }
+              />
+            </dl>
+          </CardContent>
+        </Card>
+
         {/* Contacto */}
         <Card>
           <CardHeader>
@@ -193,6 +221,10 @@ export default function PacienteDetallePage() {
             <dl>
               <Row label="Tabaco" value={p.smoking ? HABIT_STATUS_LABELS[p.smoking] : null} />
               <Row label="Alcohol" value={p.alcohol ? HABIT_STATUS_LABELS[p.alcohol] : null} />
+              <Row
+                label="Ejercicio físico"
+                value={p.physicalExercise ? EXERCISE_LEVEL_LABELS[p.physicalExercise] : null}
+              />
               <Row label="Notas" value={p.habitsNotes} />
             </dl>
           </CardContent>

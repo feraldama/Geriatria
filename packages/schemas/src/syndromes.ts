@@ -34,6 +34,85 @@ export type SyndromeKey = (typeof GERIATRIC_SYNDROMES)[number]["key"];
 
 export const SYNDROME_KEYS: SyndromeKey[] = GERIATRIC_SYNDROMES.map((s) => s.key);
 
+/**
+ * Escala de Deterioro Global (GDS-FAST, Reisberg). Estadiaje del deterioro
+ * cognitivo global en 7 estadios. Se registra dentro de la evaluación de
+ * síndromes geriátricos (estadia el síndrome de deterioro cognitivo/demencia).
+ * Es una selección única del estadio 1–7, no una suma de puntos.
+ */
+export interface GdsStage {
+  stage: number; // 1..7
+  title: string; // nombre del estadio
+  phase: string; // fase clínica
+  mec: string; // rango orientativo del MEC (Mini Examen Cognoscitivo)
+  summary: string; // características FAST resumidas
+}
+
+export const GDS_FAST_STAGES: GdsStage[] = [
+  {
+    stage: 1,
+    title: "Ausencia de déficit cognitivo",
+    phase: "Normal",
+    mec: "30–35",
+    summary: "Ausencia de déficit funcionales objetivos o subjetivos.",
+  },
+  {
+    stage: 2,
+    title: "Déficit cognitivo muy leve",
+    phase: "Normal para su edad · olvido",
+    mec: "25–30",
+    summary:
+      "Déficit funcional subjetivo: quejas de olvido de nombres o ubicación de objetos, sin objetivarse en el examen.",
+  },
+  {
+    stage: 3,
+    title: "Déficit cognitivo leve",
+    phase: "Deterioro límite",
+    mec: "20–27",
+    summary:
+      "Déficit en tareas ocupacionales y sociales complejas que empiezan a observar familiares y amigos.",
+  },
+  {
+    stage: 4,
+    title: "Déficit cognitivo moderado",
+    phase: "Enfermedad de Alzheimer leve",
+    mec: "16–23",
+    summary:
+      "Déficits en tareas complejas: manejo de finanzas, planificación de viajes o comidas; dificultad en la resta seriada.",
+  },
+  {
+    stage: 5,
+    title: "Déficit cognitivo moderadamente grave",
+    phase: "Enfermedad de Alzheimer moderada",
+    mec: "10–19",
+    summary:
+      "Necesita asistencia para elegir la ropa; olvida datos importantes de su vida cotidiana; cierta desorientación temporoespacial.",
+  },
+  {
+    stage: 6,
+    title: "Déficit cognitivo grave",
+    phase: "Enfermedad de Alzheimer moderadamente grave",
+    mec: "0–12",
+    summary:
+      "Necesita ayuda para vestirse, bañarse y asearse; puede aparecer incontinencia; cambios de personalidad y afectividad.",
+  },
+  {
+    stage: 7,
+    title: "Déficit cognitivo muy grave",
+    phase: "Enfermedad de Alzheimer grave",
+    mec: "0",
+    summary:
+      "Pérdida progresiva del habla y de la capacidad motora (deambulación); incontinencia; asistencia total.",
+  },
+];
+
+/** Etiqueta corta de un estadio GDS (para tablas y resúmenes). */
+export function gdsStageLabel(stage: number | null | undefined): string | null {
+  if (stage == null) return null;
+  const s = GDS_FAST_STAGES.find((g) => g.stage === stage);
+  return s ? `GDS ${s.stage} · ${s.title}` : `GDS ${stage}`;
+}
+
 /** Etiqueta legible de una clave de síndrome. */
 export function syndromeLabel(key: string): string {
   return GERIATRIC_SYNDROMES.find((s) => s.key === key)?.label ?? key;
@@ -61,6 +140,11 @@ export const syndromeAssessmentSchema = z.object({
     .refine(isValidDateString, "Fecha inválida (dd/mm/aaaa)"),
   // Claves de los síndromes marcados como presentes ese día.
   present: z.array(z.string()).default([]),
+  // Estadio GDS-FAST (1–7), opcional. null = sin estadiar.
+  gdsStage: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
+    z.number().int().min(1).max(7).nullable(),
+  ),
   notes: z
     .string()
     .trim()
@@ -74,5 +158,6 @@ export interface SyndromeAssessmentItem {
   id: string;
   assessedAt: string; // ISO
   present: SyndromeKey[];
+  gdsStage: number | null;
   notes: string | null;
 }

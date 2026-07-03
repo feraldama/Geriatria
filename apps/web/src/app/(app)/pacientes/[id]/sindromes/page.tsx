@@ -6,6 +6,7 @@ import { Plus, Check, Minus } from "lucide-react";
 import {
   formatDate,
   GERIATRIC_SYNDROMES,
+  gdsStageLabel,
   PERMISSIONS,
 } from "@geriatria/schemas";
 import { useSyndromes } from "@/lib/syndromes";
@@ -68,6 +69,14 @@ export default function SindromesPage() {
               </Badge>
             </CardHeader>
             <CardContent>
+              {latest.gdsStage != null && (
+                <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Deterioro global:
+                  </span>
+                  <Badge variant="primary">{gdsStageLabel(latest.gdsStage)}</Badge>
+                </div>
+              )}
               <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                 {GERIATRIC_SYNDROMES.map((s) => {
                   const on = present.has(s.key);

@@ -14,6 +14,10 @@ import {
   DEPENDENCY_LEVEL_LABELS,
   HABIT_STATUS,
   HABIT_STATUS_LABELS,
+  EDUCATION_LEVEL,
+  EDUCATION_LEVEL_LABELS,
+  EXERCISE_LEVEL,
+  EXERCISE_LEVEL_LABELS,
   ALLERGY_SEVERITY,
   ALLERGY_SEVERITY_LABELS,
   type CreatePatientInput,
@@ -39,6 +43,10 @@ interface FormValues {
   birthDate: string;
   sex: "" | (typeof SEX)[number];
   maritalStatus: "" | (typeof MARITAL_STATUS)[number];
+  birthPlace: string;
+  education: "" | (typeof EDUCATION_LEVEL)[number];
+  educationYears: string;
+  occupation: string;
   address: string;
   phone: string;
   phoneAlt: string;
@@ -56,6 +64,7 @@ interface FormValues {
   familyHistory: string;
   smoking: "" | (typeof HABIT_STATUS)[number];
   alcohol: "" | (typeof HABIT_STATUS)[number];
+  physicalExercise: "" | (typeof EXERCISE_LEVEL)[number];
   habitsNotes: string;
   notes: string;
   caregivers: {
@@ -78,6 +87,10 @@ function emptyValues(): FormValues {
     birthDate: "",
     sex: "",
     maritalStatus: "",
+    birthPlace: "",
+    education: "",
+    educationYears: "",
+    occupation: "",
     address: "",
     phone: "",
     phoneAlt: "",
@@ -95,6 +108,7 @@ function emptyValues(): FormValues {
     familyHistory: "",
     smoking: "",
     alcohol: "",
+    physicalExercise: "",
     habitsNotes: "",
     notes: "",
     caregivers: [],
@@ -113,6 +127,10 @@ function fromDetail(p: PatientDetail): FormValues {
     birthDate: formatDate(p.birthDate),
     sex: p.sex,
     maritalStatus: p.maritalStatus ?? "",
+    birthPlace: s(p.birthPlace),
+    education: p.education ?? "",
+    educationYears: p.educationYears != null ? String(p.educationYears) : "",
+    occupation: s(p.occupation),
     address: s(p.address),
     phone: s(p.phone),
     phoneAlt: s(p.phoneAlt),
@@ -130,6 +148,7 @@ function fromDetail(p: PatientDetail): FormValues {
     familyHistory: s(p.familyHistory),
     smoking: p.smoking ?? "",
     alcohol: p.alcohol ?? "",
+    physicalExercise: p.physicalExercise ?? "",
     habitsNotes: s(p.habitsNotes),
     notes: s(p.notes),
     caregivers: p.caregivers.map((c) => ({
@@ -257,6 +276,41 @@ export function PatientForm({
               ))}
             </Select>
           </Field>
+          <Field label="Lugar de nacimiento" htmlFor="birthPlace" error={errors.birthPlace?.message}>
+            <Input id="birthPlace" {...register("birthPlace")} />
+          </Field>
+          <Field label="Ocupación" htmlFor="occupation" error={errors.occupation?.message}>
+            <Input id="occupation" {...register("occupation")} />
+          </Field>
+          <Field
+            label="Escolaridad"
+            htmlFor="education"
+            error={errors.education?.message}
+          >
+            <Select id="education" {...register("education")}>
+              <option value="">Seleccionar…</option>
+              {EDUCATION_LEVEL.map((v) => (
+                <option key={v} value={v}>
+                  {EDUCATION_LEVEL_LABELS[v]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field
+            label="Años de estudio"
+            htmlFor="educationYears"
+            hint="Usado para ajustar escalas cognitivas"
+            error={errors.educationYears?.message}
+          >
+            <Input
+              id="educationYears"
+              type="number"
+              min={0}
+              max={40}
+              inputMode="numeric"
+              {...register("educationYears")}
+            />
+          </Field>
         </CardContent>
       </Card>
 
@@ -375,6 +429,16 @@ export function PatientForm({
               {HABIT_STATUS.map((v) => (
                 <option key={v} value={v}>
                   {HABIT_STATUS_LABELS[v]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Ejercicio físico" htmlFor="physicalExercise">
+            <Select id="physicalExercise" {...register("physicalExercise")}>
+              <option value="">Seleccionar…</option>
+              {EXERCISE_LEVEL.map((v) => (
+                <option key={v} value={v}>
+                  {EXERCISE_LEVEL_LABELS[v]}
                 </option>
               ))}
             </Select>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Check, Minus } from "lucide-react";
-import { formatDate, GERIATRIC_SYNDROMES } from "@geriatria/schemas";
+import { formatDate, GERIATRIC_SYNDROMES, GDS_FAST_STAGES } from "@geriatria/schemas";
 import { useSyndrome } from "@/lib/syndromes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,9 @@ export default function SindromeDetallePage() {
     return <p className="p-6 text-destructive">No se pudo cargar la evaluación.</p>;
 
   const present = new Set(assessment.present);
+  const gds = assessment.gdsStage != null
+    ? GDS_FAST_STAGES.find((g) => g.stage === assessment.gdsStage)
+    : null;
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -68,6 +71,26 @@ export default function SindromeDetallePage() {
           </ul>
         </CardContent>
       </Card>
+
+      {gds && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Escala de Deterioro Global (GDS-FAST)</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="primary" className="text-base">
+                GDS {gds.stage}
+              </Badge>
+              <span className="font-medium">{gds.title}</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {gds.phase} · MEC {gds.mec}
+            </p>
+            <p className="text-sm text-muted-foreground">{gds.summary}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {assessment.notes && (
         <Card>

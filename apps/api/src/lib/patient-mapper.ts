@@ -142,6 +142,10 @@ export function serializeDetail(p: PatientWithRelations): PatientDetail {
     sex: p.sex,
     maritalStatus: p.maritalStatus,
     photoUrl: p.photoUrl,
+    birthPlace: p.birthPlace,
+    education: p.education,
+    educationYears: p.educationYears,
+    occupation: p.occupation,
     address: p.address,
     phone: p.phone,
     phoneAlt: p.phoneAlt,
@@ -159,6 +163,7 @@ export function serializeDetail(p: PatientWithRelations): PatientDetail {
     familyHistory: p.familyHistory,
     smoking: p.smoking,
     alcohol: p.alcohol,
+    physicalExercise: p.physicalExercise,
     habitsNotes: p.habitsNotes,
     notes: p.notes,
     caregivers: p.caregivers.map((c) => ({

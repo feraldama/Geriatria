@@ -9,7 +9,9 @@ import {
   partialScaleScore,
   scaleMaxScore,
   type ScaleAnswers,
+  type ScaleContext,
   type ScaleDefinition,
+  type EducationLevel,
   type Sex,
 } from "@geriatria/schemas";
 import { useApplyScale } from "@/lib/scales";
@@ -31,15 +33,21 @@ export function ScaleForm({
   patientId,
   def,
   sex,
+  education,
+  educationYears,
 }: {
   patientId: string;
   def: ScaleDefinition;
   /** Sexo del paciente: lo usan las escalas dependientes del sexo (Lawton). */
   sex?: Sex;
+  /** Escolaridad: ajusta la interpretación de MoCA/Pfeiffer. */
+  education?: EducationLevel | null;
+  educationYears?: number | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const apply = useApplyScale(patientId);
+  const ctx: ScaleContext = { sex, education, educationYears };
 
   // En "options" guardamos el ÍNDICE de la opción elegida (no los puntos), para
   // preservar el nivel exacto y poder puntuar según el sexo. En "range"/"number"
@@ -51,7 +59,7 @@ export function ScaleForm({
 
   const answeredCount = def.questions.filter((q) => answers[q.id] !== undefined).length;
   const complete = answeredCount === def.questions.length;
-  const partialScore = partialScaleScore(def, answers as ScaleAnswers, { sex });
+  const partialScore = partialScaleScore(def, answers as ScaleAnswers, ctx);
   const maxScore = scaleMaxScore(def, sex);
 
   function setAnswer(qid: string, value: number | undefined) {
@@ -163,9 +171,13 @@ export function ScaleForm({
                           className="h-4 w-4 accent-primary"
                         />
                         <span className="flex-1">{opt.label}</span>
-                        <span className="tabular-nums text-sm text-muted-foreground">
-                          {optionPoints(opt, sex)}
-                        </span>
+                        {/* Escalas por algoritmo (CAM) no suman puntos: se omite
+                            el valor por opción para no confundir. */}
+                        {!def.computeScore && (
+                          <span className="tabular-nums text-sm text-muted-foreground">
+                            {optionPoints(opt, sex)}
+                          </span>
+                        )}
                       </label>
                     ))}
                   </div>
@@ -237,8 +249,8 @@ export function ScaleForm({
             <span className="text-base font-normal text-muted-foreground"> / {maxScore}</span>
           </span>
           {complete ? (
-            <Badge variant={LEVEL_BADGE[def.interpret(partialScore, { sex }).level]} className="ml-3">
-              {def.interpret(partialScore, { sex }).label}
+            <Badge variant={LEVEL_BADGE[def.interpret(partialScore, ctx).level]} className="ml-3">
+              {def.interpret(partialScore, ctx).label}
             </Badge>
           ) : (
             <span className="ml-3 text-sm text-muted-foreground">

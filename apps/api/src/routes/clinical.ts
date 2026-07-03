@@ -24,6 +24,7 @@ import {
   carePlanSchema,
   syndromeAssessmentSchema,
   sanitizeSyndromeKeys,
+  gdsStageLabel,
   sanitizePhysicalExam,
   cognitionAssessmentSchema,
   sanitizeBoolArray,
@@ -383,12 +384,16 @@ clinicalRouter.get(
         })),
         ...syndromes.map((s) => {
           const present = sanitizeSyndromeKeys(s.present);
+          const gds = gdsStageLabel(s.gdsStage);
+          const base = present.length
+            ? `${present.length} síndrome(s) presente(s)`
+            : "Sin síndromes marcados";
           return {
             id: s.id,
             type: "syndrome" as const,
             date: s.assessedAt.toISOString(),
             title: "Síndromes geriátricos",
-            detail: present.length ? `${present.length} síndrome(s) presente(s)` : "Sin síndromes marcados",
+            detail: gds ? `${base} · ${gds}` : base,
           };
         }),
         ...languages.map((l) => {
@@ -706,13 +711,17 @@ clinicalRouter.post(
         throw badRequest("Respuestas inválidas");
       }
 
-      // El sexo se usa para puntuar/interpretar escalas dependientes del sexo
-      // (Lawton). Lo tomamos del paciente, nunca del cliente.
-      const patientSex = await prisma.patient.findUnique({
+      // El sexo (Lawton) y la escolaridad (MoCA/Pfeiffer) se usan para puntuar/
+      // interpretar. Se toman del paciente, nunca del cliente.
+      const patientCtx = await prisma.patient.findUnique({
         where: { id: patientId },
-        select: { sex: true },
+        select: { sex: true, education: true, educationYears: true },
       });
-      const ctx = { sex: patientSex?.sex };
+      const ctx = {
+        sex: patientCtx?.sex,
+        education: patientCtx?.education ?? null,
+        educationYears: patientCtx?.educationYears ?? null,
+      };
 
       let score: number;
       try {
@@ -754,12 +763,14 @@ function serializeSyndrome(s: {
   id: string;
   assessedAt: Date;
   present: unknown;
+  gdsStage: number | null;
   notes: string | null;
 }): SyndromeAssessmentItem {
   return {
     id: s.id,
     assessedAt: s.assessedAt.toISOString(),
     present: sanitizeSyndromeKeys(s.present),
+    gdsStage: s.gdsStage,
     notes: s.notes,
   };
 }
@@ -816,6 +827,7 @@ clinicalRouter.post(
           patientId,
           assessedAt: toDateTime(body.date),
           present,
+          gdsStage: body.gdsStage ?? null,
           notes: body.notes ?? null,
           createdById: req.user!.id,
         },

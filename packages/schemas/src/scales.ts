@@ -11,30 +11,42 @@
  * ajustarse según escolaridad.
  */
 import { isValidDateString } from "./date";
-import type { Sex } from "./patient";
+import type { Sex, EducationLevel } from "./patient";
 
+// Orden de presentación agrupado por las 4 esferas de la Valoración Geriátrica
+// Integral (funcional, cognitiva, clínica, social), según la ficha de la doctora.
 export const SCALE_TYPES = [
+  // Funcionalidad
   "BARTHEL",
   "KATZ",
   "LAWTON",
+  "FRAIL",
+  "FRIED",
+  "TUG",
+  "TINETTI",
+  "BRADEN",
+  "NORTON",
+  // Cognición
   "MMSE",
   "MOCA",
   "RELOJ",
   "PFEIFFER",
-  "YESAVAGE",
-  "FRIED",
-  "FRAIL",
-  "TUG",
-  "TINETTI",
-  "MNA",
+  "CAM",
+  "TAM",
+  // Clínico
   "CHARLSON",
-  "BRADEN",
-  "NORTON",
+  "MNA",
+  // Social
   "GIJON",
   "APGAR",
   "ZARIT",
+  "YESAVAGE",
 ] as const;
 export type ScaleType = (typeof SCALE_TYPES)[number];
+
+// Las 4 esferas de la VGI, en orden de presentación.
+export const SCALE_SPHERES = ["Funcionalidad", "Cognición", "Clínico", "Social"] as const;
+export type ScaleSphere = (typeof SCALE_SPHERES)[number];
 
 export type ScaleLevel = "good" | "warning" | "bad";
 export interface ScaleInterpretation {
@@ -50,6 +62,37 @@ const I = (label: string, level: ScaleLevel): ScaleInterpretation => ({ label, l
  */
 export interface ScaleContext {
   sex?: Sex;
+  /** Nivel de escolaridad del paciente (ajuste de MoCA/Pfeiffer). */
+  education?: EducationLevel | null;
+  /** Años de estudio; si están, priman sobre el nivel para el ajuste. */
+  educationYears?: number | null;
+}
+
+/**
+ * Franja de escolaridad para ajustar la interpretación de escalas cognitivas.
+ * Prioriza los años de estudio; si no hay, usa el nivel. Devuelve null cuando
+ * no hay dato (no se aplica ningún ajuste).
+ */
+export type EducationBand = "low" | "mid" | "high";
+export function educationBand(ctx?: ScaleContext): EducationBand | null {
+  const y = ctx?.educationYears;
+  if (y != null) {
+    if (y <= 6) return "low"; // primaria o menos
+    if (y >= 13) return "high"; // estudios superiores
+    return "mid";
+  }
+  switch (ctx?.education) {
+    case "NINGUNA":
+    case "PRIMARIA":
+      return "low";
+    case "SECUNDARIA":
+      return "mid";
+    case "TERCIARIA":
+    case "UNIVERSITARIA":
+      return "high";
+    default:
+      return null; // sin dato de escolaridad
+  }
 }
 
 /** Puntos que dependen del sexo: columna M (femenino) y H (masculino). */
@@ -83,6 +126,9 @@ export type ScaleQuestion =
 export interface ScaleDefinition {
   type: ScaleType;
   name: string;
+  /** Esfera de la VGI a la que pertenece (nivel superior de agrupación). */
+  sphere: ScaleSphere;
+  /** Subgrupo dentro de la esfera (p. ej. "Riesgo de caídas"). */
   category: string;
   description: string;
   maxScore: number;
@@ -93,7 +139,19 @@ export interface ScaleDefinition {
   maxScoreBySex?: PerSexValue;
   /** true: más puntaje = mejor (Barthel, MMSE…). false: más = peor (GDS, Charlson…). */
   betterWhenHigher: boolean;
+  /**
+   * Si es true, la escala no se ofrece en el listado (se conserva la definición
+   * para no romper registros históricos). Usado para retirar escalas de la vista
+   * sin perder datos ya cargados.
+   */
+  hidden?: boolean;
   questions: ScaleQuestion[];
+  /**
+   * Puntaje NO aditivo (algoritmos como CAM, cuyo resultado depende del patrón
+   * de respuestas y no de una suma). Si está presente, reemplaza a la suma de
+   * puntos. Recibe las respuestas (índices para "options", puntos para el resto).
+   */
+  computeScore?: (answers: ScaleAnswers, ctx?: ScaleContext) => number;
   /** El contexto (sexo) solo lo usan las escalas que lo necesitan. */
   interpret: (score: number, ctx?: ScaleContext) => ScaleInterpretation;
 }
@@ -119,6 +177,7 @@ const PRESENTE_AUSENTE = [
 const BARTHEL: ScaleDefinition = {
   type: "BARTHEL",
   name: "Índice de Barthel",
+  sphere: "Funcionalidad",
   category: "Funcionalidad básica (ABVD)",
   description: "Independencia en las actividades básicas de la vida diaria (0–100).",
   maxScore: 100,
@@ -148,6 +207,7 @@ const BARTHEL: ScaleDefinition = {
 const KATZ: ScaleDefinition = {
   type: "KATZ",
   name: "Índice de Katz",
+  sphere: "Funcionalidad",
   category: "Funcionalidad básica (ABVD)",
   description: "Independencia en 6 actividades básicas (0–6).",
   maxScore: 6,
@@ -176,6 +236,7 @@ const NO_PUNTUA: PerSexValue = { M: 0, H: 0 };
 const LAWTON: ScaleDefinition = {
   type: "LAWTON",
   name: "Escala de Lawton-Brody",
+  sphere: "Funcionalidad",
   category: "Funcionalidad instrumental (AIVD)",
   description:
     "Actividades instrumentales de la vida diaria. El puntaje y la interpretación dependen del sexo: máximo 8 en mujeres y 5 en hombres (no se puntúan preparación de comida, cuidado de la casa ni lavado de ropa).",
@@ -292,7 +353,8 @@ const LAWTON: ScaleDefinition = {
 const MMSE: ScaleDefinition = {
   type: "MMSE",
   name: "Mini-Mental (MMSE)",
-  category: "Cognición",
+  sphere: "Cognición",
+  category: "Cribado cognitivo global",
   description: "Examen cognitivo breve (0–30). Cargá los puntos por sección. Ajustar por escolaridad.",
   maxScore: 30,
   betterWhenHigher: true,
@@ -322,8 +384,10 @@ const MMSE: ScaleDefinition = {
 const MOCA: ScaleDefinition = {
   type: "MOCA",
   name: "MoCA (Montreal)",
-  category: "Cognición",
-  description: "Evaluación cognitiva de Montreal (0–30). Sumar 1 punto si ≤12 años de escolaridad.",
+  sphere: "Cognición",
+  category: "Cribado cognitivo global",
+  description:
+    "Evaluación cognitiva de Montreal (0–30). La interpretación suma automáticamente 1 punto si el paciente tiene ≤12 años de escolaridad.",
   maxScore: 30,
   betterWhenHigher: true,
   questions: [
@@ -335,10 +399,14 @@ const MOCA: ScaleDefinition = {
     { id: "recuerdo", text: "Recuerdo diferido (5 palabras)", kind: "range", max: 5 },
     { id: "orientacion", text: "Orientación (fecha, mes, año, día, lugar, ciudad)", kind: "range", max: 6 },
   ],
-  interpret: (s) => {
-    if (s >= 26) return I("Normal", "good");
-    if (s >= 18) return I("Deterioro cognitivo leve", "warning");
-    if (s >= 10) return I("Deterioro cognitivo moderado", "bad");
+  // Se suma 1 punto (sin superar 30) si la escolaridad es ≤12 años (franja
+  // baja o media). La interpretación usa ese puntaje ajustado.
+  interpret: (s, ctx) => {
+    const band = educationBand(ctx);
+    const adj = band === "low" || band === "mid" ? Math.min(s + 1, 30) : s;
+    if (adj >= 26) return I("Normal", "good");
+    if (adj >= 18) return I("Deterioro cognitivo leve", "warning");
+    if (adj >= 10) return I("Deterioro cognitivo moderado", "bad");
     return I("Deterioro cognitivo grave", "bad");
   },
 };
@@ -347,7 +415,8 @@ const MOCA: ScaleDefinition = {
 const RELOJ: ScaleDefinition = {
   type: "RELOJ",
   name: "Test del reloj",
-  category: "Cognición",
+  sphere: "Cognición",
+  category: "Cribado cognitivo global",
   description: "Dibujo del reloj a la orden (0–10). Cargá los puntos por componente.",
   maxScore: 10,
   betterWhenHigher: true,
@@ -367,8 +436,10 @@ const RELOJ: ScaleDefinition = {
 const PFEIFFER: ScaleDefinition = {
   type: "PFEIFFER",
   name: "Cuestionario de Pfeiffer (SPMSQ)",
-  category: "Cognición",
-  description: "Cribado cognitivo por errores (0–10). Mayor número de errores = peor. Ajustar por escolaridad.",
+  sphere: "Cognición",
+  category: "Cribado cognitivo global",
+  description:
+    "Cribado cognitivo por errores (0–10). Mayor número de errores = peor. El umbral se ajusta por escolaridad: se tolera 1 error más con baja escolaridad y 1 menos con estudios superiores.",
   maxScore: 10,
   betterWhenHigher: false,
   questions: [
@@ -383,10 +454,14 @@ const PFEIFFER: ScaleDefinition = {
     { id: "p9", text: "Apellido de su madre", kind: "options", options: PRESENTE_AUSENTE_ERR() },
     { id: "p10", text: "Reste de 3 en 3 desde 20", kind: "options", options: PRESENTE_AUSENTE_ERR() },
   ],
-  interpret: (s) => {
-    if (s <= 2) return I("Función intelectual intacta", "good");
-    if (s <= 4) return I("Deterioro cognitivo leve", "warning");
-    if (s <= 7) return I("Deterioro cognitivo moderado", "bad");
+  // Umbral base de "intacto" = 2 errores; +1 con baja escolaridad, −1 con
+  // estudios superiores (regla estándar del SPMSQ).
+  interpret: (s, ctx) => {
+    const band = educationBand(ctx);
+    const t = 2 + (band === "low" ? 1 : band === "high" ? -1 : 0);
+    if (s <= t) return I("Función intelectual intacta", "good");
+    if (s <= t + 2) return I("Deterioro cognitivo leve", "warning");
+    if (s <= t + 5) return I("Deterioro cognitivo moderado", "bad");
     return I("Deterioro cognitivo severo", "bad");
   },
 };
@@ -397,12 +472,78 @@ function PRESENTE_AUSENTE_ERR(): ScaleOption[] {
   ];
 }
 
+// ─── CAM (Confusion Assessment Method) — algoritmo de delirium ──────────────
+// No es una suma: el delirium es probable si hay (1) inicio agudo/curso
+// fluctuante Y (2) inatención Y ( (3) pensamiento desorganizado O (4)
+// alteración del nivel de conciencia ). El puntaje se representa como 1
+// (positivo) / 0 (negativo) mediante `computeScore`.
+const CAM: ScaleDefinition = {
+  type: "CAM",
+  name: "CAM (evaluación de delirium)",
+  sphere: "Cognición",
+  category: "Delirium",
+  description:
+    "Cribado de delirium por algoritmo. Es positivo si hay inicio agudo/curso fluctuante e inatención, más pensamiento desorganizado o alteración de la conciencia.",
+  maxScore: 1,
+  betterWhenHigher: false,
+  questions: [
+    { id: "inicio_agudo", text: "1. Inicio agudo y curso fluctuante", kind: "options", options: PRESENTE_AUSENTE },
+    { id: "inatencion", text: "2. Inatención (dificultad para mantener la atención)", kind: "options", options: PRESENTE_AUSENTE },
+    { id: "pensamiento_desorganizado", text: "3. Pensamiento desorganizado (incoherente, ilógico)", kind: "options", options: PRESENTE_AUSENTE },
+    { id: "alteracion_conciencia", text: "4. Alteración del nivel de conciencia (distinto de alerta)", kind: "options", options: PRESENTE_AUSENTE },
+  ],
+  computeScore: (answers) => {
+    // Cada feature guarda el índice de la opción; "Presente" vale 1.
+    const present = (id: string): boolean => {
+      const q = CAM.questions.find((qq) => qq.id === id);
+      if (!q || q.kind !== "options") return false;
+      const opt = q.options[Number(answers[id])];
+      return !!opt && optionPoints(opt) === 1;
+    };
+    const positivo =
+      present("inicio_agudo") &&
+      present("inatencion") &&
+      (present("pensamiento_desorganizado") || present("alteracion_conciencia"));
+    return positivo ? 1 : 0;
+  },
+  interpret: (s) =>
+    s >= 1 ? I("CAM positivo — delirium probable", "bad") : I("CAM negativo", "good"),
+};
+
+// ─── T@M (Test de Alteración de Memoria) ────────────────────────────────────
+// Test de cribado de memoria (0–50) con 5 subpruebas. Se cargan los puntos por
+// subprueba (la profesional administra el test con sus estímulos). Versión
+// estándar publicada; confirmar/ajustar estímulos y puntos de corte con ella.
+const TAM: ScaleDefinition = {
+  type: "TAM",
+  name: "Test de Alteración de Memoria (T@M)",
+  sphere: "Cognición",
+  category: "Memoria",
+  description:
+    "Cribado de memoria (0–50). Cargá los puntos por subprueba. Ajustar por escolaridad; confirmar la versión/estímulos con la profesional.",
+  maxScore: 50,
+  betterWhenHigher: true,
+  questions: [
+    { id: "orientacion", text: "Orientación temporal", kind: "range", max: 5 },
+    { id: "semantica", text: "Memoria semántica remota", kind: "range", max: 5 },
+    { id: "libre", text: "Recuerdo libre", kind: "range", max: 10 },
+    { id: "clave", text: "Recuerdo con clave (facilitado)", kind: "range", max: 10 },
+    { id: "perceptiva", text: "Memoria de codificación / perceptiva", kind: "range", max: 20 },
+  ],
+  interpret: (s) => {
+    if (s >= 48) return I("Normal", "good");
+    if (s >= 38) return I("Posible deterioro de memoria (DCL amnésico)", "warning");
+    return I("Sugestivo de demencia tipo Alzheimer", "bad");
+  },
+};
+
 // ─── Yesavage (GDS-15) ─────────────────────────────────────────────────────
 const NO_1 = [{ label: "Sí", value: 0 }, { label: "No", value: 1 }];
 const SI_1 = [{ label: "Sí", value: 1 }, { label: "No", value: 0 }];
 const YESAVAGE: ScaleDefinition = {
   type: "YESAVAGE",
   name: "Depresión Geriátrica de Yesavage (GDS-15)",
+  sphere: "Social",
   category: "Estado de ánimo",
   description: "Cribado de depresión (0–15). Mayor puntaje = mayor sintomatología.",
   maxScore: 15,
@@ -435,10 +576,12 @@ const YESAVAGE: ScaleDefinition = {
 const FRIED: ScaleDefinition = {
   type: "FRIED",
   name: "Criterios de fragilidad de Fried",
+  sphere: "Funcionalidad",
   category: "Fragilidad",
   description: "Fenotipo de fragilidad (0–5). Mayor puntaje = más frágil.",
   maxScore: 5,
   betterWhenHigher: false,
+  hidden: true, // retirada de la vista a pedido de la doctora; se usa FRAIL.
   questions: [
     { id: "peso", text: "Pérdida de peso involuntaria (>4,5 kg en el último año)", kind: "options", options: PRESENTE_AUSENTE },
     { id: "agotamiento", text: "Agotamiento / baja energía (autorreferido)", kind: "options", options: PRESENTE_AUSENTE },
@@ -457,6 +600,7 @@ const FRIED: ScaleDefinition = {
 const FRAIL: ScaleDefinition = {
   type: "FRAIL",
   name: "Escala FRAIL",
+  sphere: "Funcionalidad",
   category: "Fragilidad",
   description: "Cribado de fragilidad (0–5). Mayor puntaje = más frágil.",
   maxScore: 5,
@@ -479,6 +623,7 @@ const FRAIL: ScaleDefinition = {
 const TUG: ScaleDefinition = {
   type: "TUG",
   name: "Timed Up and Go (TUG)",
+  sphere: "Funcionalidad",
   category: "Riesgo de caídas",
   description: "Tiempo en levantarse, caminar 3 m, volver y sentarse (segundos).",
   maxScore: 60,
@@ -497,6 +642,7 @@ const TUG: ScaleDefinition = {
 const TINETTI: ScaleDefinition = {
   type: "TINETTI",
   name: "Escala de Tinetti (POMA)",
+  sphere: "Funcionalidad",
   category: "Riesgo de caídas",
   description: "Marcha y equilibrio (0–28). Cargá los puntos de cada bloque.",
   maxScore: 28,
@@ -516,6 +662,7 @@ const TINETTI: ScaleDefinition = {
 const MNA: ScaleDefinition = {
   type: "MNA",
   name: "Mini Nutritional Assessment (MNA-SF)",
+  sphere: "Clínico",
   category: "Nutrición",
   description: "Cribado nutricional, versión corta (0–14).",
   maxScore: 14,
@@ -548,6 +695,7 @@ const ch = (text: string, weight: number, id: string): ScaleQuestion => ({
 const CHARLSON: ScaleDefinition = {
   type: "CHARLSON",
   name: "Índice de comorbilidad de Charlson",
+  sphere: "Clínico",
   category: "Comorbilidad",
   description: "Suma ponderada de comorbilidades (versión no ajustada por edad). Mayor = peor pronóstico.",
   maxScore: 37,
@@ -585,6 +733,7 @@ const CHARLSON: ScaleDefinition = {
 const BRADEN: ScaleDefinition = {
   type: "BRADEN",
   name: "Escala de Braden",
+  sphere: "Funcionalidad",
   category: "Riesgo de úlceras por presión",
   description: "Riesgo de úlceras por presión (6–23). Menor puntaje = mayor riesgo.",
   maxScore: 23,
@@ -608,6 +757,7 @@ const BRADEN: ScaleDefinition = {
 const NORTON: ScaleDefinition = {
   type: "NORTON",
   name: "Escala de Norton",
+  sphere: "Funcionalidad",
   category: "Riesgo de úlceras por presión",
   description: "Riesgo de úlceras por presión (5–20). Menor puntaje = mayor riesgo.",
   maxScore: 20,
@@ -632,6 +782,7 @@ const SOCIAL_CAT = "Valoración social y familiar";
 const GIJON: ScaleDefinition = {
   type: "GIJON",
   name: "Escala sociofamiliar de Gijón",
+  sphere: "Social",
   category: SOCIAL_CAT,
   description:
     "Valoración del riesgo social (5–25). Mayor puntaje = peor situación social. Versión abreviada (Barcelona).",
@@ -716,6 +867,7 @@ const APGAR_OPTS = [
 const APGAR: ScaleDefinition = {
   type: "APGAR",
   name: "APGAR familiar",
+  sphere: "Social",
   category: SOCIAL_CAT,
   description: "Percepción de la función familiar (0–10). Mayor puntaje = mejor función familiar.",
   maxScore: 10,
@@ -770,6 +922,7 @@ const ZARIT_ITEMS: string[] = [
 const ZARIT: ScaleDefinition = {
   type: "ZARIT",
   name: "Escala de sobrecarga del cuidador de Zarit",
+  sphere: "Social",
   category: SOCIAL_CAT,
   description:
     "Sobrecarga del cuidador principal (22–110). Se aplica al CUIDADOR, no al paciente. Mayor puntaje = más sobrecarga.",
@@ -796,6 +949,8 @@ export const SCALE_DEFINITIONS: Record<ScaleType, ScaleDefinition> = {
   MOCA,
   RELOJ,
   PFEIFFER,
+  CAM,
+  TAM,
   YESAVAGE,
   FRIED,
   FRAIL,
@@ -810,7 +965,7 @@ export const SCALE_DEFINITIONS: Record<ScaleType, ScaleDefinition> = {
   ZARIT,
 };
 
-/** Categorías en orden de presentación. */
+/** Categorías en orden de presentación (incluye ocultas para compatibilidad). */
 export const SCALE_CATEGORIES: string[] = (() => {
   const seen: string[] = [];
   for (const t of SCALE_TYPES) {
@@ -818,6 +973,45 @@ export const SCALE_CATEGORIES: string[] = (() => {
     if (!seen.includes(c)) seen.push(c);
   }
   return seen;
+})();
+
+/** Tipos de escala visibles (excluye las marcadas como `hidden`). */
+export const VISIBLE_SCALE_TYPES: ScaleType[] = SCALE_TYPES.filter(
+  (t) => !SCALE_DEFINITIONS[t].hidden,
+);
+
+/** Un subgrupo dentro de una esfera, con sus escalas visibles en orden. */
+export interface ScaleCategoryGroup {
+  category: string;
+  types: ScaleType[];
+}
+/** Una esfera de la VGI con sus subgrupos. */
+export interface ScaleSphereGroup {
+  sphere: ScaleSphere;
+  categories: ScaleCategoryGroup[];
+}
+
+/**
+ * Escalas visibles agrupadas por esfera → subgrupo, en orden de presentación.
+ * Es la estructura que consume el listado de escalas (2 niveles).
+ */
+export const SCALE_GROUPS: ScaleSphereGroup[] = (() => {
+  const groups: ScaleSphereGroup[] = [];
+  for (const sphere of SCALE_SPHERES) {
+    const categories: ScaleCategoryGroup[] = [];
+    for (const t of VISIBLE_SCALE_TYPES) {
+      const def = SCALE_DEFINITIONS[t];
+      if (def.sphere !== sphere) continue;
+      let cat = categories.find((c) => c.category === def.category);
+      if (!cat) {
+        cat = { category: def.category, types: [] };
+        categories.push(cat);
+      }
+      cat.types.push(t);
+    }
+    if (categories.length) groups.push({ sphere, categories });
+  }
+  return groups;
 })();
 
 export function getScaleDefinition(type: string): ScaleDefinition | null {
@@ -860,7 +1054,9 @@ export function computeScaleScore(
       total += value;
     }
   }
-  return total;
+  // Escalas con puntaje no aditivo (CAM): el total sumado se ignora y se usa
+  // el algoritmo, una vez validado que todas las respuestas están presentes.
+  return def.computeScore ? def.computeScore(answers, ctx) : total;
 }
 
 /**
@@ -872,6 +1068,8 @@ export function partialScaleScore(
   answers: ScaleAnswers,
   ctx?: ScaleContext,
 ): number {
+  // El algoritmo (CAM) tolera respuestas faltantes (las trata como ausentes).
+  if (def.computeScore) return def.computeScore(answers, ctx);
   let total = 0;
   for (const q of def.questions) {
     const raw = answers[q.id];

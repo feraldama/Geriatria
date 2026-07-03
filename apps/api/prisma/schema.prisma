@@ -126,6 +126,20 @@ enum HabitStatus {
   ACTIVO
 }
 
+enum EducationLevel {
+  NINGUNA
+  PRIMARIA
+  SECUNDARIA
+  TERCIARIA
+  UNIVERSITARIA
+}
+
+enum ExerciseLevel {
+  SEDENTARIO
+  OCASIONAL
+  REGULAR
+}
+
 enum AllergySeverity {
   LEVE
   MODERADA
@@ -191,6 +205,12 @@ model Patient {
   maritalStatus MaritalStatus?
   photoUrl   String?
 
+  // Datos sociodemográficos
+  birthPlace     String? // lugar de nacimiento
+  education      EducationLevel?
+  educationYears Int? // años de estudio (ajuste de escalas cognitivas)
+  occupation     String?
+
   // Contacto
   address  String?
   phone    String?
@@ -217,6 +237,7 @@ model Patient {
   familyHistory    String? @db.Text
   smoking          HabitStatus?
   alcohol          HabitStatus?
+  physicalExercise ExerciseLevel?
   habitsNotes      String?
   notes            String? @db.Text
 
@@ -505,6 +526,7 @@ model SyndromeAssessment {
 
   assessedAt DateTime @default(now())
   present    Json // claves de síndromes presentes: string[]
+  gdsStage   Int? // estadio GDS-FAST (1–7), opcional
   notes      String?
 
   createdAt   DateTime  @default(now())

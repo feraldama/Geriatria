@@ -8,9 +8,12 @@ import {
   SEX_LABELS,
   MARITAL_STATUS_LABELS,
   DEPENDENCY_LEVEL_LABELS,
+  EDUCATION_LEVEL_LABELS,
+  EXERCISE_LEVEL_LABELS,
   MEDICATION_ROUTE_LABELS,
   SCALE_DEFINITIONS,
   syndromeLabel,
+  gdsStageLabel,
   PHYSICAL_EXAM_GROUPS,
   type AssessmentScaleItem,
 } from "@geriatria/schemas";
@@ -76,10 +79,28 @@ export default function ResumenImprimiblePage() {
           <Row label="Fecha de nacimiento" value={formatDate(p.birthDate)} />
           <Row label="Sexo" value={SEX_LABELS[p.sex]} />
           <Row label="Estado civil" value={p.maritalStatus ? MARITAL_STATUS_LABELS[p.maritalStatus] : null} />
+          <Row label="Lugar de nacimiento" value={p.birthPlace} />
+          <Row label="Ocupación" value={p.occupation} />
+          <Row
+            label="Escolaridad"
+            value={
+              p.education
+                ? `${EDUCATION_LEVEL_LABELS[p.education]}${
+                    p.educationYears != null ? ` (${p.educationYears} años)` : ""
+                  }`
+                : p.educationYears != null
+                  ? `${p.educationYears} años`
+                  : null
+            }
+          />
           <Row label="Teléfono" value={p.phone} />
           <Row label="Dirección" value={p.address} />
           <Row label="Vive con" value={p.livesWith} />
           <Row label="Dependencia" value={p.dependencyLevel ? DEPENDENCY_LEVEL_LABELS[p.dependencyLevel] : null} />
+          <Row
+            label="Ejercicio físico"
+            value={p.physicalExercise ? EXERCISE_LEVEL_LABELS[p.physicalExercise] : null}
+          />
         </Grid>
       </Section>
 
@@ -149,6 +170,12 @@ export default function ResumenImprimiblePage() {
 
       {latestSyndromes && (
         <Section title={`Síndromes geriátricos (${formatDate(latestSyndromes.assessedAt)})`}>
+          {latestSyndromes.gdsStage != null && (
+            <p className="mb-1">
+              <span className="font-semibold">Deterioro global:</span>{" "}
+              {gdsStageLabel(latestSyndromes.gdsStage)}
+            </p>
+          )}
           {latestSyndromes.present.length === 0 ? (
             <p className="text-muted-foreground">Sin síndromes marcados.</p>
           ) : (

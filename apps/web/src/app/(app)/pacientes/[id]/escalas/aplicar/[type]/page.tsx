@@ -32,7 +32,13 @@ export default function AplicarEscalaPage() {
             <h2 className="font-heading text-xl font-semibold">Aplicar: {def.name}</h2>
             <p className="text-sm text-muted-foreground">{def.description}</p>
           </div>
-          <ScaleForm patientId={id} def={def} sex={patient?.sex} />
+          <ScaleForm
+            patientId={id}
+            def={def}
+            sex={patient?.sex}
+            education={patient?.education}
+            educationYears={patient?.educationYears}
+          />
         </>
       )}
     </div>
