@@ -13,6 +13,9 @@ out/
 # Next.js: archivo de tipos autogenerado (se regenera con `next dev`/`build`)
 next-env.d.ts
 
+# ─── Reglas locales de Claude (específicas de esta máquina, NO versionar) ────
+CLAUDE.local.md
+
 # ─── Entornos y secretos (NUNCA versionar) ──────────────────────────────────
 .env
 .env.local

@@ -92,10 +92,10 @@ export const consultationSchema = z.object({
     .transform((v) => (v ? v : ""))
     .refine((v) => v === "" || isValidTimeString(v), "Hora inválida (HH:mm)"),
   appointmentId: z.string().optional().nullable(),
-  subjective: z.string().trim().max(5000).optional().transform((v) => (v === "" || v === undefined ? null : v)),
-  objective: z.string().trim().max(5000).optional().transform((v) => (v === "" || v === undefined ? null : v)),
-  assessment: z.string().trim().max(5000).optional().transform((v) => (v === "" || v === undefined ? null : v)),
-  plan: z.string().trim().max(5000).optional().transform((v) => (v === "" || v === undefined ? null : v)),
+  subjective: z.string().trim().max(5000).optional().nullable().transform((v) => (v === "" || v === undefined || v === null ? null : v)),
+  objective: z.string().trim().max(5000).optional().nullable().transform((v) => (v === "" || v === undefined || v === null ? null : v)),
+  assessment: z.string().trim().max(5000).optional().nullable().transform((v) => (v === "" || v === undefined || v === null ? null : v)),
+  plan: z.string().trim().max(5000).optional().nullable().transform((v) => (v === "" || v === undefined || v === null ? null : v)),
   // Examen físico/neurológico estructurado (opcional): mapa campo→texto.
   physicalExam: physicalExamSchema,
   // Signos vitales tomados en la consulta (opcional, embebidos).
