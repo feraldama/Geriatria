@@ -103,8 +103,8 @@ const optionalText = (max = 255) =>
     .string()
     .trim()
     .max(max)
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v));
+    .nullish()
+    .transform((v) => (v === "" || v == null ? null : v));
 
 const birthDateSchema = z
   .string()
@@ -191,7 +191,7 @@ export const createPatientSchema = z.object({
     .string()
     .trim()
     .email("Correo inválido")
-    .optional()
+    .nullish()
     .or(z.literal(""))
     .transform((v) => (v ? v : null)),
 

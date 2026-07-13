@@ -47,8 +47,8 @@ export const roleSchema = z.object({
     .string()
     .trim()
     .max(255)
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v)),
+    .nullish()
+    .transform((v) => (v === "" || v == null ? null : v)),
   // Lista de acciones de permiso (ej. "patient:read") asignadas al rol.
   permissions: z.array(z.string()).default([]),
 });

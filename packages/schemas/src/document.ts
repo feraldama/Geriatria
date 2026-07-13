@@ -27,15 +27,15 @@ export const documentMetadataSchema = z.object({
   category: z.enum(DOCUMENT_CATEGORY),
   studyDate: z
     .string()
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v))
+    .nullish()
+    .transform((v) => (v === "" || v == null ? null : v))
     .refine((v) => v === null || isValidDateString(v), "Fecha inválida (dd/mm/aaaa)"),
   notes: z
     .string()
     .trim()
     .max(1000)
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v)),
+    .nullish()
+    .transform((v) => (v === "" || v == null ? null : v)),
 });
 export type DocumentMetadataInput = z.infer<typeof documentMetadataSchema>;
 

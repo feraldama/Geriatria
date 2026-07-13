@@ -6,26 +6,60 @@
  * en Postgres. Aquí se centraliza la conversión de presentación para no
  * repetir lógica en toda la app.
  */
-import { format, parse, isValid } from "date-fns";
+import { parse, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 
 export const DATE_FORMAT = "dd/MM/yyyy";
 export const DATE_TIME_FORMAT = "dd/MM/yyyy HH:mm";
 
-/** Formatea una fecha a `dd/mm/aaaa`. Devuelve "" si la entrada es inválida. */
+/**
+ * Zona horaria de la clínica. TODA la presentación de fechas/horas se hace en
+ * esta zona, sin importar dónde esté el navegador o el servidor. Así una
+ * consulta creada desde otro país (p. ej. España) muestra siempre la hora
+ * de la clínica (Paraguay), igual para todos.
+ */
+export const CLINIC_TIME_ZONE = "America/Asuncion";
+
+/** Extrae los componentes de fecha/hora de un instante en la zona de la clínica. */
+function clinicParts(date: Date): {
+  day: string;
+  month: string;
+  year: string;
+  hour: string;
+  minute: string;
+} {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: CLINIC_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  // Algunos motores emiten "24" a medianoche con hour12:false.
+  let hour = get("hour");
+  if (hour === "24") hour = "00";
+  return { day: get("day"), month: get("month"), year: get("year"), hour, minute: get("minute") };
+}
+
+/** Formatea una fecha a `dd/mm/aaaa` (hora de la clínica). Devuelve "" si es inválida. */
 export function formatDate(value: Date | string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "";
   const date = value instanceof Date ? value : new Date(value);
   if (!isValid(date)) return "";
-  return format(date, DATE_FORMAT, { locale: es });
+  const { day, month, year } = clinicParts(date);
+  return `${day}/${month}/${year}`;
 }
 
-/** Formatea una fecha con hora a `dd/mm/aaaa HH:mm`. Devuelve "" si es inválida. */
+/** Formatea una fecha con hora a `dd/mm/aaaa HH:mm` (hora de la clínica). Devuelve "" si es inválida. */
 export function formatDateTime(value: Date | string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "";
   const date = value instanceof Date ? value : new Date(value);
   if (!isValid(date)) return "";
-  return format(date, DATE_TIME_FORMAT, { locale: es });
+  const { day, month, year, hour, minute } = clinicParts(date);
+  return `${day}/${month}/${year} ${hour}:${minute}`;
 }
 
 /**
@@ -63,12 +97,13 @@ export function isValidTimeString(input: string): boolean {
   return TIME_PATTERN.test(input.trim());
 }
 
-/** Formatea solo la hora `HH:mm` (24h) de una fecha. */
+/** Formatea solo la hora `HH:mm` (24h, hora de la clínica) de una fecha. */
 export function formatTime(value: Date | string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "";
   const date = value instanceof Date ? value : new Date(value);
   if (!isValid(date)) return "";
-  return format(date, "HH:mm", { locale: es });
+  const { hour, minute } = clinicParts(date);
+  return `${hour}:${minute}`;
 }
 
 /**

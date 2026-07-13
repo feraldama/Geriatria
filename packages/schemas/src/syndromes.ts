@@ -149,8 +149,8 @@ export const syndromeAssessmentSchema = z.object({
     .string()
     .trim()
     .max(1000)
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v)),
+    .nullish()
+    .transform((v) => (v === "" || v == null ? null : v)),
 });
 export type SyndromeAssessmentInput = z.infer<typeof syndromeAssessmentSchema>;
 

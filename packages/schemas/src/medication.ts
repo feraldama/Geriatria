@@ -40,8 +40,8 @@ const optText = (max: number) =>
     .string()
     .trim()
     .max(max)
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v));
+    .nullish()
+    .transform((v) => (v === "" || v == null ? null : v));
 
 function optionalEnum<T extends readonly [string, ...string[]]>(values: T) {
   return z.preprocess(
@@ -52,8 +52,8 @@ function optionalEnum<T extends readonly [string, ...string[]]>(values: T) {
 
 const optDate = z
   .string()
-  .optional()
-  .transform((v) => (v === "" || v === undefined ? null : v))
+  .nullish()
+  .transform((v) => (v === "" || v == null ? null : v))
   .refine((v) => v === null || isValidDateString(v), "Fecha inválida (dd/mm/aaaa)");
 
 export const createMedicationSchema = z.object({

@@ -7,8 +7,8 @@ import { isValidDateString } from "./date";
 
 const optDate = z
   .string()
-  .optional()
-  .transform((v) => (v === "" || v === undefined ? null : v))
+  .nullish()
+  .transform((v) => (v === "" || v == null ? null : v))
   .refine((v) => v === null || isValidDateString(v), "Fecha inválida (dd/mm/aaaa)");
 
 const optText = (max: number) =>
@@ -16,8 +16,8 @@ const optText = (max: number) =>
     .string()
     .trim()
     .max(max)
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v));
+    .nullish()
+    .transform((v) => (v === "" || v == null ? null : v));
 
 // ─── Vacunación ───────────────────────────────────────────────────────────────
 

@@ -50,14 +50,14 @@ export const createAppointmentSchema = z.object({
     .string()
     .trim()
     .max(300)
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v)),
+    .nullish()
+    .transform((v) => (v === "" || v == null ? null : v)),
   notes: z
     .string()
     .trim()
     .max(2000)
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v)),
+    .nullish()
+    .transform((v) => (v === "" || v == null ? null : v)),
 });
 export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>;
 

@@ -37,8 +37,8 @@ export const vitalSignSchema = z.object({
     .string()
     .trim()
     .max(500)
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v)),
+    .nullish()
+    .transform((v) => (v === "" || v == null ? null : v)),
 });
 export type VitalSignInput = z.infer<typeof vitalSignSchema>;
 

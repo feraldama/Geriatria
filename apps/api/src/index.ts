@@ -4,9 +4,11 @@ import { prisma } from "./lib/prisma.js";
 
 const app = createApp();
 
-const server = app.listen(env.PORT, () => {
-  console.log(`🩺 API de Geriatría escuchando en http://localhost:${env.PORT}`);
-  console.log(`   Healthcheck: http://localhost:${env.PORT}/health`);
+// Escuchamos en 0.0.0.0 para aceptar conexiones externas (no solo locales),
+// de modo que el frontend pueda llegar a la API desde otra máquina/IP.
+const server = app.listen(env.PORT, "0.0.0.0", () => {
+  console.log(`🩺 API de Geriatría escuchando en http://0.0.0.0:${env.PORT}`);
+  console.log(`   Healthcheck: http://0.0.0.0:${env.PORT}/health`);
 });
 
 // Cierre ordenado: desconectamos Prisma al recibir señales de terminación.
