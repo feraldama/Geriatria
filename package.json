@@ -11,6 +11,7 @@
     "dev:api": "pnpm --filter @geriatria/api run dev",
     "dev:web": "pnpm --filter @geriatria/web run dev",
     "build": "pnpm -r run build",
+    "start": "pnpm --parallel -r run start",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
     "test": "pnpm -r run test",
