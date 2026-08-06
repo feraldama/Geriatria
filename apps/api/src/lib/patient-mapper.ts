@@ -77,54 +77,151 @@ export async function applyUpdate(
 ): Promise<void> {
   const { caregivers, conditions, allergies, birthDate, ...core } = input;
 
+  // Si cambió algún campo que compone la búsqueda, recalculamos searchText en
+  // el mismo UPDATE fusionando lo que llega con lo ya persistido.
+  const searchChanged =
+    core.firstName !== undefined || core.lastName !== undefined || core.documentId !== undefined;
+  let searchText: string | undefined;
+  if (searchChanged) {
+    const row = await tx.patient.findUniqueOrThrow({
+      where: { id },
+      select: { firstName: true, lastName: true, documentId: true },
+    });
+    searchText = buildSearchText([
+      core.firstName ?? row.firstName,
+      core.lastName ?? row.lastName,
+      core.documentId !== undefined ? core.documentId : row.documentId,
+    ]);
+  }
+
   await tx.patient.update({
     where: { id },
     data: {
       ...coreData(core),
       ...(birthDate ? { birthDate: parseDate(birthDate)! } : {}),
+      ...(searchText !== undefined ? { searchText } : {}),
     },
   });
 
-  // Si cambió algún campo que compone la búsqueda, recalculamos searchText
-  // a partir de los valores ya persistidos.
-  if (core.firstName !== undefined || core.lastName !== undefined || core.documentId !== undefined) {
-    const row = await tx.patient.findUniqueOrThrow({
-      where: { id },
-      select: { firstName: true, lastName: true, documentId: true },
-    });
-    await tx.patient.update({
-      where: { id },
-      data: { searchText: buildSearchText([row.firstName, row.lastName, row.documentId]) },
-    });
-  }
-
   if (caregivers !== undefined) {
-    await tx.caregiver.deleteMany({ where: { patientId: id } });
-    if (caregivers.length)
-      await tx.caregiver.createMany({
-        data: caregivers.map((c) => ({ ...c, patientId: id })),
-      });
+    await reconcile({
+      current: await tx.caregiver.findMany({ where: { patientId: id, deletedAt: null } }),
+      incoming: caregivers,
+      keyOf: (c) => normalizeSearch(c.name),
+      remove: (ids) =>
+        tx.caregiver.updateMany({ where: { id: { in: ids } }, data: { deletedAt: new Date() } }),
+      update: (rowId, c) => tx.caregiver.update({ where: { id: rowId }, data: { ...c } }),
+      create: (items) =>
+        tx.caregiver.createMany({ data: items.map((c) => ({ ...c, patientId: id })) }),
+    });
   }
   if (conditions !== undefined) {
-    await tx.condition.deleteMany({ where: { patientId: id } });
-    if (conditions.length)
-      await tx.condition.createMany({
-        data: conditions.map((c) => ({
-          patientId: id,
-          name: c.name,
-          active: c.active,
-          notes: c.notes,
-          since: c.since ? parseDate(c.since) : null,
-        })),
-      });
+    await reconcile({
+      current: await tx.condition.findMany({ where: { patientId: id, deletedAt: null } }),
+      incoming: conditions,
+      keyOf: (c) => normalizeSearch(c.name),
+      remove: (ids) =>
+        tx.condition.updateMany({ where: { id: { in: ids } }, data: { deletedAt: new Date() } }),
+      update: (rowId, c) =>
+        tx.condition.update({
+          where: { id: rowId },
+          data: {
+            name: c.name,
+            active: c.active,
+            notes: c.notes,
+            since: c.since ? parseDate(c.since) : null,
+          },
+        }),
+      create: (items) =>
+        tx.condition.createMany({
+          data: items.map((c) => ({
+            patientId: id,
+            name: c.name,
+            active: c.active,
+            notes: c.notes,
+            since: c.since ? parseDate(c.since) : null,
+          })),
+        }),
+    });
   }
   if (allergies !== undefined) {
-    await tx.allergy.deleteMany({ where: { patientId: id } });
-    if (allergies.length)
-      await tx.allergy.createMany({
-        data: allergies.map((a) => ({ ...a, patientId: id })),
-      });
+    await reconcile({
+      current: await tx.allergy.findMany({ where: { patientId: id, deletedAt: null } }),
+      incoming: allergies,
+      keyOf: (a) => normalizeSearch(a.substance),
+      remove: (ids) =>
+        tx.allergy.updateMany({ where: { id: { in: ids } }, data: { deletedAt: new Date() } }),
+      update: (rowId, a) => tx.allergy.update({ where: { id: rowId }, data: { ...a } }),
+      create: (items) =>
+        tx.allergy.createMany({ data: items.map((a) => ({ ...a, patientId: id })) }),
+    });
   }
+}
+
+/**
+ * Reconcilia una colección del paciente contra la que envía el formulario.
+ *
+ * El payload no trae ids, así que se emparejan las filas por su clave natural
+ * (el nombre del cuidador/condición, la sustancia de la alergia). Lo que sigue
+ * presente se actualiza en su lugar y lo que desapareció se da de baja lógica:
+ * nunca se borra físicamente. Saber cuándo se quitó una alergia es un dato de
+ * seguridad del paciente, y borrar y recrear perdería esa traza en cada
+ * guardado del formulario.
+ */
+export async function reconcile<TRow extends { id: string }, TInput>(opts: {
+  current: TRow[];
+  incoming: TInput[];
+  keyOf: (item: TRow | TInput) => string;
+  remove: (ids: string[]) => Promise<unknown>;
+  update: (id: string, item: TInput) => Promise<unknown>;
+  create: (items: TInput[]) => Promise<unknown>;
+}): Promise<void> {
+  const { current, incoming, keyOf, remove, update, create } = opts;
+
+  // El formulario puede mandar la misma sustancia dos veces ("Penicilina" y
+  // "penicilina"): se queda la primera. Sin esto, cada guardado agregaba una
+  // fila más y el duplicado terminaba siendo imposible de borrar desde la UI.
+  const deduped: TInput[] = [];
+  const seen = new Set<string>();
+  for (const item of incoming) {
+    const key = keyOf(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+
+  // Una clave puede tener más de una fila vigente si se colaron duplicados
+  // antes de esta lógica; se agrupan todas para poder limpiarlas.
+  const currentByKey = new Map<string, TRow[]>();
+  for (const row of current) {
+    const key = keyOf(row);
+    const bucket = currentByKey.get(key);
+    if (bucket) bucket.push(row);
+    else currentByKey.set(key, [row]);
+  }
+
+  const toCreate: TInput[] = [];
+  const updates: { id: string; item: TInput }[] = [];
+  const keptIds = new Set<string>();
+
+  for (const item of deduped) {
+    // Se reutiliza la primera fila con esa clave; las demás quedan para baja.
+    const row = currentByKey.get(keyOf(item))?.[0];
+    if (row) {
+      keptIds.add(row.id);
+      updates.push({ id: row.id, item });
+    } else {
+      toCreate.push(item);
+    }
+  }
+
+  const removedIds = current.filter((row) => !keptIds.has(row.id)).map((row) => row.id);
+
+  // En paralelo: son decenas de UPDATE dentro de una transacción interactiva y
+  // encadenarlos secuencialmente puede agotar su tiempo límite.
+  await Promise.all(updates.map(({ id, item }) => update(id, item)));
+  if (removedIds.length) await remove(removedIds);
+  if (toCreate.length) await create(toCreate);
 }
 
 // Tipo del paciente con relaciones cargadas (para serializar).

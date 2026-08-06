@@ -39,11 +39,17 @@ export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
 // Duraciones sugeridas (minutos) para el selector.
 export const DURATION_OPTIONS = [15, 20, 30, 45, 60, 90] as const;
 
+/**
+ * Duración máxima de una cita. El backend deriva de acá la ventana que usa
+ * para detectar solapes, así que ampliarla no puede dejar huecos silenciosos.
+ */
+export const MAX_DURATION_MIN = 480;
+
 export const createAppointmentSchema = z.object({
   patientId: z.string().min(1, "Seleccioná un paciente"),
   date: z.string().min(1, "La fecha es obligatoria").refine(isValidDateString, "Fecha inválida (dd/mm/aaaa)"),
   time: z.string().min(1, "La hora es obligatoria").refine(isValidTimeString, "Hora inválida (HH:mm)"),
-  durationMin: z.coerce.number().int().min(5, "Mínimo 5 minutos").max(480, "Máximo 8 horas"),
+  durationMin: z.coerce.number().int().min(5, "Mínimo 5 minutos").max(MAX_DURATION_MIN, "Máximo 8 horas"),
   type: z.enum(APPOINTMENT_TYPE),
   status: z.enum(APPOINTMENT_STATUS).default("PROGRAMADA"),
   reason: z

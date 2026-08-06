@@ -11,6 +11,7 @@ import {
   PERMISSIONS,
   type CarePlanInput,
 } from "@geriatria/schemas";
+import { ApiError } from "@/lib/api";
 import { useCarePlan, useSaveCarePlan } from "@/lib/extras";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { useToast } from "@/components/ui/toast";
@@ -62,9 +63,14 @@ export default function PlanCuidadosPage() {
   }
 
   const onSubmit = handleSubmit(async (data) => {
-    await save.mutateAsync(data as unknown as CarePlanInput);
-    toast("Plan de cuidados guardado");
-    setEditing(false);
+    try {
+      await save.mutateAsync(data as unknown as CarePlanInput);
+      toast("Plan de cuidados guardado");
+      setEditing(false);
+    } catch (err) {
+      // Se mantiene en modo edición para no perder lo escrito.
+      toast(err instanceof ApiError ? err.message : "No se pudo guardar el plan", "error");
+    }
   }, () => scrollToFirstError());
 
   if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;

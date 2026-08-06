@@ -8,7 +8,9 @@ interface TimeInputProps {
   onBlur?: () => void;
   invalid?: boolean;
   className?: string;
+  // Los inyecta <Field> (ver components/ui/field.tsx); se reenvían al input.
   "aria-describedby"?: string;
+  "aria-required"?: boolean;
 }
 
 /**

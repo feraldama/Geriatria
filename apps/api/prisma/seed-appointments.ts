@@ -4,6 +4,7 @@
  * previas de esos pacientes antes de recrear.
  */
 import { PrismaClient } from "@prisma/client";
+import { assertNotProduction } from "./seed-guard.js";
 
 const prisma = new PrismaClient();
 
@@ -15,6 +16,7 @@ function at(daysFromToday: number, hour: number, minute = 0): Date {
 }
 
 async function main() {
+  assertNotProduction();
   console.log("🌱 Sembrando citas ficticias (solo desarrollo)...");
   const patients = await prisma.patient.findMany({
     where: { deletedAt: null },

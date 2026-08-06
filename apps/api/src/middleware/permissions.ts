@@ -11,7 +11,9 @@ import { forbidden, unauthorized } from "../lib/errors.js";
 
 /** Exige que el usuario autenticado tenga TODOS los permisos indicados. */
 export function requirePermission(...required: PermissionAction[]) {
-  return (req: Request, _res: Response, next: NextFunction) => {
+  // El nombre no es cosmético: permite verificar en los tests que toda ruta
+  // registrada pasa por esta guarda (ver permissions.test.ts).
+  return function permissionGuard(req: Request, _res: Response, next: NextFunction) {
     if (!req.user) return next(unauthorized());
     const granted = new Set(req.user.permissions);
     const missing = required.filter((p) => !granted.has(p));

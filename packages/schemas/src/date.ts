@@ -20,6 +20,52 @@ export const DATE_TIME_FORMAT = "dd/MM/yyyy HH:mm";
  */
 export const CLINIC_TIME_ZONE = "America/Asuncion";
 
+/**
+ * Desfase (en ms) de la zona de la clínica respecto de UTC en un instante dado.
+ * Se calcula leyendo el reloj de pared en esa zona y comparándolo con el
+ * instante real, así que contempla cualquier cambio de horario de verano.
+ */
+function clinicOffsetMs(date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: CLINIC_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  const hour = get("hour") === 24 ? 0 : get("hour");
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), hour, get("minute"), get("second"));
+  return asUtc - date.getTime();
+}
+
+/**
+ * Construye el instante real que corresponde a una hora de pared de la clínica.
+ *
+ * Es la operación inversa a `formatDate`/`formatTime`: "15/03/2026 09:00 en la
+ * clínica" es un instante único, sin importar dónde esté el navegador que lo
+ * ingresó. Sin esto, un usuario fuera de Paraguay agenda a otra hora real.
+ */
+export function clinicWallClockToDate(
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+): Date {
+  const guess = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  const firstOffset = clinicOffsetMs(new Date(guess));
+  let result = guess - firstOffset;
+  // Segunda pasada: en un cambio de horario, el desfase del instante estimado
+  // puede diferir del real.
+  const secondOffset = clinicOffsetMs(new Date(result));
+  if (secondOffset !== firstOffset) result = guess - secondOffset;
+  return new Date(result);
+}
+
 /** Extrae los componentes de fecha/hora de un instante en la zona de la clínica. */
 function clinicParts(date: Date): {
   day: string;
@@ -63,15 +109,27 @@ export function formatDateTime(value: Date | string | number | null | undefined)
 }
 
 /**
- * Parsea un string `dd/mm/aaaa` (o `dd/mm/aaaa HH:mm`) a Date.
- * Devuelve null si no se pudo parsear. Útil al recibir entrada del usuario.
+ * Parsea un string `dd/mm/aaaa` (o `dd/mm/aaaa HH:mm`) al instante que le
+ * corresponde en la zona de la clínica. Devuelve null si no se pudo parsear.
+ *
+ * Se interpreta en hora de la clínica —no la del navegador— para que
+ * `formatDate(parseDate(x)) === x` en cualquier equipo: de lo contrario, un
+ * usuario en otro huso vería la fecha de nacimiento corrida un día.
  */
 export function parseDate(input: string): Date | null {
   if (!input) return null;
   const trimmed = input.trim();
   const pattern = trimmed.includes(":") ? DATE_TIME_FORMAT : DATE_FORMAT;
+  // date-fns valida que la fecha exista de verdad (rechaza 31/02).
   const parsed = parse(trimmed, pattern, new Date(), { locale: es });
-  return isValid(parsed) ? parsed : null;
+  if (!isValid(parsed)) return null;
+  return clinicWallClockToDate(
+    parsed.getFullYear(),
+    parsed.getMonth() + 1,
+    parsed.getDate(),
+    parsed.getHours(),
+    parsed.getMinutes(),
+  );
 }
 
 /** Patrón de fecha `dd/mm/aaaa` (validación rápida de formato). */
@@ -107,25 +165,67 @@ export function formatTime(value: Date | string | number | null | undefined): st
 }
 
 /**
- * Combina una fecha `dd/mm/aaaa` y una hora `HH:mm` en un Date (hora local).
- * Devuelve null si alguno es inválido.
+ * Combina una fecha `dd/mm/aaaa` y una hora `HH:mm` en el instante real que le
+ * corresponde en la zona de la clínica. Devuelve null si alguno es inválido.
  */
 export function combineDateTime(dateStr: string, timeStr: string): Date | null {
   if (!isValidTimeString(timeStr)) return null;
+  // Se reutiliza parseDate en vez de volver a validar el formato: dos criterios
+  // distintos de "fecha válida" harían que algo aceptado en un lado se
+  // rechazara en el otro.
   const base = parseDate(dateStr);
   if (!base) return null;
-  const parts = timeStr.split(":");
-  base.setHours(Number(parts[0]), Number(parts[1]), 0, 0);
-  return base;
+  const parts = clinicParts(base);
+  const [hour, minute] = timeStr.split(":").map(Number);
+  return clinicWallClockToDate(
+    Number(parts.year),
+    Number(parts.month),
+    Number(parts.day),
+    hour!,
+    minute!,
+  );
 }
 
-/** Calcula la edad en años a partir de la fecha de nacimiento. */
+/** Primer instante del día (hora de la clínica) al que pertenece `value`. */
+export function clinicStartOfDay(value: Date): Date {
+  const { day, month, year } = clinicParts(value);
+  return clinicWallClockToDate(Number(year), Number(month), Number(day), 0, 0);
+}
+
+/** Primer instante del día siguiente (útil como cota superior exclusiva). */
+export function clinicEndOfDay(value: Date): Date {
+  return new Date(clinicStartOfDay(value).getTime() + 24 * 60 * 60_000);
+}
+
+/**
+ * Clave `aaaa-mm-dd` del día de la clínica al que pertenece un instante.
+ * Agrupar por esta clave da el mismo resultado en cualquier navegador.
+ */
+export function clinicDayKey(value: Date | string): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!isValid(date)) return "";
+  const { day, month, year } = clinicParts(date);
+  return `${year}-${month}-${day}`;
+}
+
+/** ¿Dos instantes caen el mismo día en la zona de la clínica? */
+export function isSameClinicDay(a: Date | string, b: Date | string): boolean {
+  const keyA = clinicDayKey(a);
+  return keyA !== "" && keyA === clinicDayKey(b);
+}
+
+/**
+ * Calcula la edad en años. Se resuelve con el calendario de la clínica para
+ * que un paciente no "cumpla años" un día antes según dónde esté el navegador.
+ */
 export function calculateAge(birthDate: Date | string, reference: Date = new Date()): number {
   const birth = birthDate instanceof Date ? birthDate : new Date(birthDate);
   if (!isValid(birth)) return 0;
-  let age = reference.getFullYear() - birth.getFullYear();
-  const monthDiff = reference.getMonth() - birth.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && reference.getDate() < birth.getDate())) {
+  const b = clinicParts(birth);
+  const r = clinicParts(reference);
+  let age = Number(r.year) - Number(b.year);
+  const monthDiff = Number(r.month) - Number(b.month);
+  if (monthDiff < 0 || (monthDiff === 0 && Number(r.day) < Number(b.day))) {
     age--;
   }
   return age;

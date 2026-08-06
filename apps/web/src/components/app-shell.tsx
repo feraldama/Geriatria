@@ -64,7 +64,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const adminItems = ADMIN_NAV.filter(visible);
 
   async function onLogout() {
-    await logout.mutateAsync();
+    // Aunque falle la llamada, sacamos al usuario de la sesión local.
+    try {
+      await logout.mutateAsync();
+    } catch {
+      /* la cookie puede haber expirado ya: seguimos al login igual */
+    }
     router.replace("/login");
   }
 

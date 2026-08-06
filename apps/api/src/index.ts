@@ -11,10 +11,22 @@ const server = app.listen(env.PORT, "0.0.0.0", () => {
   console.log(`   Healthcheck: http://0.0.0.0:${env.PORT}/health`);
 });
 
-// Cierre ordenado: desconectamos Prisma al recibir señales de terminación.
+// Cierre ordenado: dejamos terminar las peticiones en vuelo (una consulta a
+// medio guardar) antes de soltar la conexión a la base.
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+
 async function shutdown(signal: string) {
   console.log(`\n${signal} recibido, cerrando...`);
-  server.close();
+  await new Promise<void>((resolve) => {
+    const forced = setTimeout(() => {
+      console.warn("   Peticiones en vuelo demoraron demasiado; se cierra igual.");
+      resolve();
+    }, SHUTDOWN_TIMEOUT_MS);
+    server.close(() => {
+      clearTimeout(forced);
+      resolve();
+    });
+  });
   await prisma.$disconnect();
   process.exit(0);
 }

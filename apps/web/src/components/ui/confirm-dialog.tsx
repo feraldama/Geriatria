@@ -33,6 +33,22 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const cancelRef = React.useRef<HTMLButtonElement>(null);
   const dialogRef = React.useRef<HTMLDivElement>(null);
+  // Ids por instancia: dos diálogos montados a la vez no pueden compartirlos.
+  const baseId = React.useId();
+  const titleId = `${baseId}-title`;
+  const descId = `${baseId}-desc`;
+
+  // onCancel suele llegar como arrow inline: guardarla en una ref evita que el
+  // efecto se reejecute en cada render del padre y vuelva a mover el foco.
+  const onCancelRef = React.useRef(onCancel);
+  React.useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
+
+  const loadingRef = React.useRef(loading);
+  React.useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -45,8 +61,8 @@ export function ConfirmDialog({
     cancelRef.current?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !loading) {
-        onCancel();
+      if (e.key === "Escape" && !loadingRef.current) {
+        onCancelRef.current();
         return;
       }
       // Trampa de foco: Tab cicla solo entre los elementos del diálogo.
@@ -73,7 +89,7 @@ export function ConfirmDialog({
       document.body.style.overflow = previousOverflow;
       previouslyFocused?.focus?.();
     };
-  }, [open, loading, onCancel]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -89,16 +105,16 @@ export function ConfirmDialog({
         ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
-        aria-labelledby="confirm-title"
-        aria-describedby={description ? "confirm-desc" : undefined}
+        aria-labelledby={titleId}
+        aria-describedby={description ? descId : undefined}
         className="relative w-full max-w-md animate-fade-in rounded-lg border border-border bg-card p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="confirm-title" className="font-heading text-lg font-semibold">
+        <h2 id={titleId} className="font-heading text-lg font-semibold">
           {title}
         </h2>
         {description && (
-          <p id="confirm-desc" className="mt-2 text-muted-foreground">
+          <p id={descId} className="mt-2 text-muted-foreground">
             {description}
           </p>
         )}

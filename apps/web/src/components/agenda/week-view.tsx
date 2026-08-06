@@ -1,9 +1,10 @@
 "use client";
 
-import { isSameDay, isToday, format } from "date-fns";
+import { isToday, format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Plus } from "lucide-react";
 import type { AppointmentItem } from "@geriatria/schemas";
+import { isOnCalendarDay } from "@/lib/calendar";
 import { AppointmentChip } from "./appointment-chip";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +21,7 @@ export function WeekView({ days, appointments, canWrite, onEdit, onNewOnDay }: W
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-7">
       {days.map((day) => {
         const dayAppts = appointments
-          .filter((a) => isSameDay(new Date(a.scheduledAt), day))
+          .filter((a) => isOnCalendarDay(a.scheduledAt, day))
           .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
         return (
           <div key={day.toISOString()} className="flex flex-col rounded-md border border-border">

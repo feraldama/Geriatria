@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useForm, Controller, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -48,6 +49,8 @@ export function VitalsForm({
 }) {
   const { toast } = useToast();
   const create = useCreateVital(patientId);
+  // El instante inicial se toma en el render (servidor y cliente coinciden en
+  // hora de la clínica) y se refresca al montar, por si pasó un minuto.
   const now = new Date();
 
   const {
@@ -55,7 +58,8 @@ export function VitalsForm({
     control,
     watch,
     handleSubmit,
-    formState: { errors },
+    setValue,
+    formState: { errors, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(vitalSignSchema) as unknown as Resolver<FormValues>,
     mode: "onTouched",
@@ -77,6 +81,17 @@ export function VitalsForm({
       notes: "",
     },
   });
+
+  // Ajusta fecha y hora al momento real de apertura, sin pisar lo que el
+  // usuario ya haya tocado.
+  useEffect(() => {
+    if (isDirty) return;
+    const ahora = new Date();
+    setValue("date", formatDate(ahora));
+    setValue("time", formatTime(ahora));
+    // Solo al montar: después manda lo que escriba el usuario.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const bmi = calculateBMI(Number(watch("weight")) || null, Number(watch("height")) || null);
 
@@ -113,22 +128,26 @@ export function VitalsForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Fecha" htmlFor="vf-date" required error={errors.date?.message} hint="dd/mm/aaaa">
-          <Controller
-            control={control}
-            name="date"
-            render={({ field }) => (
-              <DateInput id="vf-date" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.date} />
-            )}
-          />
+          {(aria) => (
+            <Controller
+              control={control}
+              name="date"
+              render={({ field }) => (
+                <DateInput id="vf-date" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.date} {...aria} />
+              )}
+            />
+          )}
         </Field>
         <Field label="Hora" htmlFor="vf-time" error={errors.time?.message} hint="24h (opcional)">
-          <Controller
-            control={control}
-            name="time"
-            render={({ field }) => (
-              <TimeInput id="vf-time" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.time} />
-            )}
-          />
+          {(aria) => (
+            <Controller
+              control={control}
+              name="time"
+              render={({ field }) => (
+                <TimeInput id="vf-time" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.time} {...aria} />
+              )}
+            />
+          )}
         </Field>
       </div>
 

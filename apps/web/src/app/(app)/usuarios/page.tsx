@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, Search, Pencil, KeyRound, UserX } from "lucide-react";
 import { formatDateTime, type UserListItem } from "@geriatria/schemas";
+import { ApiError } from "@/lib/api";
 import { useUsers, useDeleteUser } from "@/lib/admin";
 import { useDebounce } from "@/lib/use-debounce";
 import { useCurrentUser } from "@/lib/auth";
@@ -37,9 +38,14 @@ export default function UsuariosPage() {
 
   async function onConfirmDeactivate() {
     if (!deactivate) return;
-    await del.mutateAsync(deactivate.id);
-    toast(`${deactivate.name} fue desactivado`);
-    setDeactivate(null);
+    try {
+      await del.mutateAsync(deactivate.id);
+      toast(`${deactivate.name} fue desactivado`);
+      setDeactivate(null);
+    } catch (err) {
+      // El diálogo queda abierto para que el usuario vea qué pasó y reintente.
+      toast(err instanceof ApiError ? err.message : "No se pudo desactivar el usuario", "error");
+    }
   }
 
   const columns: DataTableColumn<UserListItem>[] = [

@@ -51,23 +51,30 @@ authRouter.post("/login", validateBody(loginSchema), async (req, res, next) => {
       throw invalidCredentials;
     }
 
-    // Si había un bloqueo y ya venció, partimos el contador de cero para no
-    // re-bloquear con un único error posterior.
-    const priorAttempts = user.lockedUntil ? 0 : user.failedLoginAttempts;
-
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) {
-      const attempts = priorAttempts + 1;
-      const shouldLock = attempts >= MAX_FAILED_ATTEMPTS;
-      await prisma.user.update({
+      // El incremento lo hace la base, no la aplicación: leer el contador y
+      // escribir el valor calculado permitiría evadir el bloqueo lanzando
+      // varios intentos en paralelo (todos escribirían "1").
+      // Si el bloqueo anterior ya venció, arrancamos de cero para no
+      // re-bloquear con un único error posterior.
+      const lockExpired = !!user.lockedUntil && user.lockedUntil <= new Date();
+      const updated = await prisma.user.update({
         where: { id: user.id },
-        data: {
-          failedLoginAttempts: attempts,
-          lockedUntil: shouldLock
-            ? new Date(Date.now() + LOCK_MINUTES * 60_000)
-            : null,
-        },
+        data: lockExpired
+          ? { failedLoginAttempts: 1, lockedUntil: null }
+          : { failedLoginAttempts: { increment: 1 }, lockedUntil: null },
+        select: { failedLoginAttempts: true },
       });
+
+      const attempts = updated.failedLoginAttempts;
+      const shouldLock = attempts >= MAX_FAILED_ATTEMPTS;
+      if (shouldLock) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60_000) },
+        });
+      }
       await recordAudit({
         userId: user.id,
         action: shouldLock ? "login.locked" : "login.failed",
@@ -84,7 +91,7 @@ authRouter.post("/login", validateBody(loginSchema), async (req, res, next) => {
     });
     await recordAudit({ userId: user.id, action: "login.success", req });
 
-    const token = signSession({ sub: user.id });
+    const token = signSession({ sub: user.id, ver: user.tokenVersion });
     res.cookie(SESSION_COOKIE, token, sessionCookieOptions());
     res.json({ user: toAuthenticatedUser(user) });
   } catch (err) {
@@ -117,10 +124,22 @@ authRouter.patch(
       const ok = await verifyPassword(currentPassword, user.passwordHash);
       if (!ok) throw badRequest("La contraseña actual es incorrecta");
 
-      await prisma.user.update({
+      // Subir tokenVersion invalida las sesiones abiertas (incluida la de un
+      // atacante que hubiera obtenido la contraseña anterior). Como el propio
+      // usuario está cambiándola, le reemitimos la cookie con la nueva versión.
+      const updated = await prisma.user.update({
         where: { id: userId },
-        data: { passwordHash: await hashPassword(newPassword) },
+        data: {
+          passwordHash: await hashPassword(newPassword),
+          tokenVersion: { increment: 1 },
+        },
+        select: { tokenVersion: true },
       });
+      res.cookie(
+        SESSION_COOKIE,
+        signSession({ sub: userId, ver: updated.tokenVersion }),
+        sessionCookieOptions(),
+      );
       await recordAudit({ userId, action: "password.change", req });
       res.json({ ok: true });
     } catch (err) {

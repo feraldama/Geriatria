@@ -18,6 +18,7 @@ import {
   type PatientDetail,
 } from "@geriatria/schemas";
 import { usePatient, useDeletePatient } from "@/lib/patients";
+import { ApiError } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -57,9 +58,18 @@ export default function PacienteDetallePage() {
   const p: PatientDetail = patient;
 
   async function onConfirmDelete() {
-    await del.mutateAsync(id);
-    toast(`${p.firstName} ${p.lastName} dado de baja`);
-    router.replace("/pacientes");
+    try {
+      await del.mutateAsync(id);
+      toast(`${p.firstName} ${p.lastName} dado de baja`);
+      router.replace("/pacientes");
+    } catch (err) {
+      // P. ej. 409: el paciente tiene citas pendientes en la agenda.
+      setConfirmOpen(false);
+      toast(
+        err instanceof ApiError ? err.message : "No se pudo dar de baja al paciente",
+        "error",
+      );
+    }
   }
 
   return (

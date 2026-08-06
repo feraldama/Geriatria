@@ -16,8 +16,8 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { validateBody } from "../middleware/validate.js";
-import { recordAudit } from "../lib/audit.js";
-import { notFound } from "../lib/errors.js";
+import { recordAudit, diffFields } from "../lib/audit.js";
+import { conflict, notFound } from "../lib/errors.js";
 import {
   toCreateData,
   applyUpdate,
@@ -31,10 +31,11 @@ export const patientsRouter: Router = Router();
 // Todas las rutas requieren sesión.
 patientsRouter.use(requireAuth);
 
+// Las sub-entidades se dan de baja lógica (no se borran): hay que filtrarlas.
 const detailInclude = {
-  caregivers: { orderBy: { isPrimary: "desc" } },
-  conditions: { orderBy: { createdAt: "asc" } },
-  allergies: { orderBy: { createdAt: "asc" } },
+  caregivers: { where: { deletedAt: null }, orderBy: { isPrimary: "desc" } },
+  conditions: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
+  allergies: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
 } satisfies Prisma.PatientInclude;
 
 // GET /patients?q=&page=&pageSize=  → listado con búsqueda y paginación.
@@ -75,7 +76,7 @@ patientsRouter.get("/", requirePermission(PERMISSIONS.PATIENT_READ), async (req,
       prisma.patient.count({ where }),
       prisma.patient.findMany({
         where,
-        include: { _count: { select: { allergies: true } } },
+        include: { _count: { select: { allergies: { where: { deletedAt: null } } } } },
         orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -151,14 +152,19 @@ patientsRouter.patch(
       const id = String(req.params.id);
       const existing = await prisma.patient.findFirst({
         where: { id, deletedAt: null },
-        select: { id: true },
+        include: detailInclude,
       });
       if (!existing) throw notFound("Paciente no encontrado");
 
-      const patient = await prisma.$transaction(async (tx) => {
-        await applyUpdate(tx, id, req.body);
-        return tx.patient.findUniqueOrThrow({ where: { id }, include: detailInclude });
-      });
+      const patient = await prisma.$transaction(
+        async (tx) => {
+          await applyUpdate(tx, id, req.body);
+          return tx.patient.findUniqueOrThrow({ where: { id }, include: detailInclude });
+        },
+        // Una ficha con muchas condiciones, alergias y cuidadores hace bastantes
+        // consultas; los 5 s por defecto quedan cortos contra una base remota.
+        { timeout: 15_000 },
+      );
 
       await recordAudit({
         userId: req.user!.id,
@@ -166,6 +172,13 @@ patientsRouter.patch(
         resource: "patient",
         resourceId: id,
         req,
+        // Sin el antes/después, la auditoría solo diría "alguien editó al
+        // paciente", que no sirve para reconstruir la historia clínica.
+        metadata:
+          diffFields(
+            serializeDetail(existing) as unknown as Record<string, unknown>,
+            serializeDetail(patient) as unknown as Record<string, unknown>,
+          ) ?? undefined,
       });
       res.json({ patient: serializeDetail(patient) });
     } catch (err) {
@@ -186,6 +199,25 @@ patientsRouter.delete(
         select: { id: true },
       });
       if (!existing) throw notFound("Paciente no encontrado");
+
+      // Con citas pendientes (programadas/confirmadas a futuro) no se permite
+      // la baja: quedarían citas huérfanas en la agenda. Primero cancelarlas
+      // o reprogramarlas.
+      const pendientes = await prisma.appointment.count({
+        where: {
+          patientId: id,
+          deletedAt: null,
+          scheduledAt: { gte: new Date() },
+          status: { in: ["PROGRAMADA", "CONFIRMADA"] },
+        },
+      });
+      if (pendientes > 0) {
+        throw conflict(
+          `No se puede dar de baja: el paciente tiene ${pendientes} cita${
+            pendientes === 1 ? "" : "s"
+          } pendiente${pendientes === 1 ? "" : "s"} en la agenda. Cancelalas o reprogramalas primero.`,
+        );
+      }
 
       await prisma.patient.update({ where: { id }, data: { deletedAt: new Date() } });
       await recordAudit({

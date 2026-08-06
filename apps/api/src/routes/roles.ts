@@ -18,7 +18,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { validateBody } from "../middleware/validate.js";
 import { recordAudit } from "../lib/audit.js";
-import { badRequest, notFound } from "../lib/errors.js";
+import { badRequest, forbidden, notFound } from "../lib/errors.js";
 
 type RoleWithRels = Prisma.RoleGetPayload<{
   include: { permissions: { include: { permission: true } }; _count: { select: { users: true } } };
@@ -41,17 +41,41 @@ const include = {
 } satisfies Prisma.RoleInclude;
 
 // Reemplaza el conjunto de permisos de un rol (valida que existan en el catálogo).
-async function setRolePermissions(roleId: string, actions: string[]) {
-  const perms = await prisma.permission.findMany({ where: { action: { in: actions } } });
+// Va en una transacción: si el createMany fallara, un rol podría quedar sin
+// ningún permiso (incluido el de administración) y bloquear el sistema.
+async function setRolePermissions(
+  tx: Prisma.TransactionClient,
+  roleId: string,
+  actions: string[],
+) {
+  const perms = await tx.permission.findMany({ where: { action: { in: actions } } });
   if (perms.length !== new Set(actions).size) {
     throw badRequest("Una o más acciones de permiso no existen");
   }
-  await prisma.rolePermission.deleteMany({ where: { roleId } });
+  await tx.rolePermission.deleteMany({ where: { roleId } });
   if (perms.length) {
-    await prisma.rolePermission.createMany({
+    await tx.rolePermission.createMany({
       data: perms.map((p) => ({ roleId, permissionId: p.id })),
       skipDuplicates: true,
     });
+  }
+}
+
+/** Traduce el error de nombre duplicado de Prisma a un 400 legible. */
+function asDuplicateNameError(e: unknown): never {
+  if ((e as { code?: string }).code === "P2002") throw badRequest("Ya existe un rol con ese nombre");
+  throw e;
+}
+
+/**
+ * Impide la escalada de privilegios: nadie puede otorgar a un rol permisos que
+ * él mismo no posee (si no, cualquiera con role:manage se vuelve superusuario).
+ */
+function assertCanGrant(actorPermissions: string[], actions: string[]) {
+  const granted = new Set(actorPermissions);
+  const escalating = actions.filter((a) => !granted.has(a));
+  if (escalating.length > 0) {
+    throw forbidden(`No podés otorgar permisos que no tenés: ${escalating.join(", ")}`);
   }
 }
 
@@ -96,20 +120,24 @@ rolesRouter.get("/", async (_req, res, next) => {
 rolesRouter.post("/", validateBody(roleSchema), async (req, res, next) => {
   try {
     const { name, description, permissions } = req.body;
-    const role = await prisma.role
-      .create({ data: { name, description, isSystem: false } })
-      .catch((e) => {
-        if ((e as { code?: string }).code === "P2002") throw badRequest("Ya existe un rol con ese nombre");
-        throw e;
-      });
-    await setRolePermissions(role.id, permissions);
-    const full = await prisma.role.findUniqueOrThrow({ where: { id: role.id }, include });
+    assertCanGrant(req.user!.permissions, permissions);
+
+    // Crear el rol y asignarle sus permisos es una sola operación lógica.
+    const full = await prisma
+      .$transaction(async (tx) => {
+        const role = await tx.role.create({ data: { name, description, isSystem: false } });
+        await setRolePermissions(tx, role.id, permissions);
+        return tx.role.findUniqueOrThrow({ where: { id: role.id }, include });
+      })
+      .catch(asDuplicateNameError);
+
     await recordAudit({
       userId: req.user!.id,
       action: "role.create",
       resource: "role",
-      resourceId: role.id,
+      resourceId: full.id,
       req,
+      metadata: { after: { name: full.name, description: full.description, permissions } },
     });
     res.status(201).json({ role: serialize(full) });
   } catch (err) {
@@ -120,31 +148,44 @@ rolesRouter.post("/", validateBody(roleSchema), async (req, res, next) => {
 rolesRouter.patch("/:id", validateBody(updateRoleSchema), async (req, res, next) => {
   try {
     const id = String(req.params.id);
-    const existing = await prisma.role.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.role.findFirst({ where: { id, deletedAt: null }, include });
     if (!existing) throw notFound("Rol no encontrado");
 
     const { name, description, permissions } = req.body;
-    await prisma.role
-      .update({
-        where: { id },
-        data: {
-          ...(name !== undefined ? { name } : {}),
-          ...(description !== undefined ? { description } : {}),
-        },
-      })
-      .catch((e) => {
-        if ((e as { code?: string }).code === "P2002") throw badRequest("Ya existe un rol con ese nombre");
-        throw e;
-      });
-    if (permissions !== undefined) await setRolePermissions(id, permissions);
 
-    const full = await prisma.role.findUniqueOrThrow({ where: { id }, include });
+    // Los roles del sistema son la base del RBAC: renombrarlos o vaciarles los
+    // permisos dejaría la instalación sin nadie capaz de administrarla.
+    if (existing.isSystem && (name !== undefined || permissions !== undefined)) {
+      throw forbidden("Los roles del sistema no permiten cambiar su nombre ni sus permisos");
+    }
+    // Nadie edita el rol al que pertenece: sería auto-otorgarse permisos.
+    if (id === req.user!.role.id && permissions !== undefined) {
+      throw forbidden("No podés modificar los permisos de tu propio rol");
+    }
+    if (permissions !== undefined) assertCanGrant(req.user!.permissions, permissions);
+
+    const before = serialize(existing);
+    const full = await prisma
+      .$transaction(async (tx) => {
+        await tx.role.update({
+          where: { id },
+          data: {
+            ...(name !== undefined ? { name } : {}),
+            ...(description !== undefined ? { description } : {}),
+          },
+        });
+        if (permissions !== undefined) await setRolePermissions(tx, id, permissions);
+        return tx.role.findUniqueOrThrow({ where: { id }, include });
+      })
+      .catch(asDuplicateNameError);
+
     await recordAudit({
       userId: req.user!.id,
       action: "role.update",
       resource: "role",
       resourceId: id,
       req,
+      metadata: { before, after: serialize(full) },
     });
     res.json({ role: serialize(full) });
   } catch (err) {

@@ -72,13 +72,15 @@ export function SuspendMedicationForm({
         <Textarea id="s-reason" rows={3} aria-invalid={!!errors.suspendedReason} {...register("suspendedReason")} />
       </Field>
       <Field label="Fecha de suspensión" htmlFor="s-date" hint="dd/mm/aaaa" error={errors.suspendedDate?.message}>
-        <Controller
-          control={control}
-          name="suspendedDate"
-          render={({ field }) => (
-            <DateInput id="s-date" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.suspendedDate} />
-          )}
-        />
+        {(aria) => (
+          <Controller
+            control={control}
+            name="suspendedDate"
+            render={({ field }) => (
+              <DateInput id="s-date" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.suspendedDate} {...aria} />
+            )}
+          />
+        )}
       </Field>
       <div className="flex justify-end gap-3 pt-2">
         <Button type="button" variant="outline" onClick={onCancel} disabled={suspend.isPending}>

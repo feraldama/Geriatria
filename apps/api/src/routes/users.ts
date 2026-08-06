@@ -17,11 +17,62 @@ import { hashPassword } from "../lib/password.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { validateBody } from "../middleware/validate.js";
-import { recordAudit } from "../lib/audit.js";
-import { badRequest, notFound, HttpError } from "../lib/errors.js";
+import { recordAudit, diffFields } from "../lib/audit.js";
+import { badRequest, forbidden, notFound, HttpError } from "../lib/errors.js";
 
 export const usersRouter: Router = Router();
 usersRouter.use(requireAuth, requirePermission(PERMISSIONS.USER_MANAGE));
+
+/**
+ * Devuelve el rol destino validando que el actor pueda asignarlo.
+ *
+ * Sin esta comprobación, alguien con solo `user:manage` podría crear un usuario
+ * con rol Administrador (o mover a otro allí) y entrar con esa cuenta: escalada
+ * de privilegios completa.
+ */
+async function resolveAssignableRole(roleId: string, actorPermissions: string[]) {
+  const role = await prisma.role.findFirst({
+    where: { id: roleId, deletedAt: null },
+    include: { permissions: { include: { permission: true } } },
+  });
+  if (!role) throw badRequest("El rol indicado no existe");
+
+  const granted = new Set(actorPermissions);
+  const escalating = role.permissions
+    .map((rp) => rp.permission.action)
+    .filter((action) => !granted.has(action));
+  if (escalating.length > 0) {
+    throw forbidden(
+      `No podés asignar el rol «${role.name}»: incluye permisos que no tenés (${escalating.join(", ")})`,
+    );
+  }
+  return role;
+}
+
+/** Impide dejar la instalación sin ningún administrador activo. */
+async function assertNotLastAdmin(userId: string, action: string) {
+  const target = await prisma.user.findFirst({
+    where: { id: userId, deletedAt: null },
+    include: { role: { include: { permissions: { include: { permission: true } } } } },
+  });
+  if (!target) return;
+  const isAdmin = target.role.permissions.some(
+    (rp) => rp.permission.action === PERMISSIONS.USER_MANAGE,
+  );
+  if (!isAdmin) return;
+
+  const remaining = await prisma.user.count({
+    where: {
+      deletedAt: null,
+      active: true,
+      id: { not: userId },
+      role: { permissions: { some: { permission: { action: PERMISSIONS.USER_MANAGE } } } },
+    },
+  });
+  if (remaining === 0) {
+    throw badRequest(`No podés ${action} al último usuario con permisos de administración`);
+  }
+}
 
 function serialize(u: {
   id: string;
@@ -101,8 +152,7 @@ usersRouter.get("/:id", async (req, res, next) => {
 usersRouter.post("/", validateBody(createUserSchema), async (req, res, next) => {
   try {
     const { name, email, password, roleId, active } = req.body;
-    const role = await prisma.role.findFirst({ where: { id: roleId, deletedAt: null } });
-    if (!role) throw badRequest("El rol indicado no existe");
+    await resolveAssignableRole(roleId, req.user!.permissions);
 
     const created = await prisma.user
       .create({
@@ -128,6 +178,7 @@ usersRouter.post("/", validateBody(createUserSchema), async (req, res, next) => 
       resource: "user",
       resourceId: created.id,
       req,
+      metadata: { after: { name, email, roleId, active } },
     });
     res.status(201).json({ user: serialize(created) });
   } catch (err) {
@@ -150,10 +201,13 @@ usersRouter.patch("/:id", validateBody(updateUserSchema), async (req, res, next)
         throw badRequest("No podés cambiar tu propio rol");
       }
     }
-    if (roleId) {
-      const role = await prisma.role.findFirst({ where: { id: roleId, deletedAt: null } });
-      if (!role) throw badRequest("El rol indicado no existe");
+    if (roleId && roleId !== existing.roleId) {
+      await resolveAssignableRole(roleId, req.user!.permissions);
+      // Mover a alguien fuera del rol de administración también puede dejar la
+      // instalación sin admins.
+      await assertNotLastAdmin(id, "quitarle el rol de administración");
     }
+    if (active === false) await assertNotLastAdmin(id, "desactivar");
 
     const updated = await prisma.user
       .update({
@@ -176,6 +230,11 @@ usersRouter.patch("/:id", validateBody(updateUserSchema), async (req, res, next)
       resource: "user",
       resourceId: id,
       req,
+      metadata:
+        diffFields(
+          { name: existing.name, email: existing.email, roleId: existing.roleId, active: existing.active },
+          { name: updated.name, email: updated.email, roleId: updated.roleId, active: updated.active },
+        ) ?? undefined,
     });
     res.json({ user: serialize(updated) });
   } catch (err) {
@@ -190,6 +249,7 @@ usersRouter.delete("/:id", async (req, res, next) => {
     if (id === req.user!.id) throw badRequest("No podés eliminar tu propia cuenta");
     const existing = await prisma.user.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw notFound("Usuario no encontrado");
+    await assertNotLastAdmin(id, "eliminar");
 
     await prisma.user.update({ where: { id }, data: { deletedAt: new Date(), active: false } });
     await recordAudit({
@@ -214,6 +274,11 @@ usersRouter.post(
       const id = String(req.params.id);
       const existing = await prisma.user.findFirst({ where: { id, deletedAt: null } });
       if (!existing) throw notFound("Usuario no encontrado");
+      // Restablecer la contraseña de alguien equivale a poder entrar como él:
+      // exigimos que el actor pueda asignar ese rol.
+      if (id !== req.user!.id) {
+        await resolveAssignableRole(existing.roleId, req.user!.permissions);
+      }
 
       await prisma.user.update({
         where: { id },
@@ -221,6 +286,8 @@ usersRouter.post(
           passwordHash: await hashPassword(req.body.newPassword),
           failedLoginAttempts: 0,
           lockedUntil: null,
+          // Invalida las sesiones abiertas del usuario.
+          tokenVersion: { increment: 1 },
         },
       });
       await recordAudit({

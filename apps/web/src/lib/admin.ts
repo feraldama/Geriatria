@@ -38,6 +38,8 @@ function invalidateUsers(qc: ReturnType<typeof useQueryClient>) {
 export function useCreateUser() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: CreateUserInput) => api.post<{ user: UserListItem }>("/users", data),
     onSuccess: () => invalidateUsers(qc),
   });
@@ -46,6 +48,8 @@ export function useCreateUser() {
 export function useUpdateUser(id: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: UpdateUserInput) => api.patch<{ user: UserListItem }>(`/users/${id}`, data),
     onSuccess: () => invalidateUsers(qc),
   });
@@ -54,6 +58,8 @@ export function useUpdateUser(id: string) {
 export function useDeleteUser() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (id: string) => api.delete(`/users/${id}`),
     onSuccess: () => invalidateUsers(qc),
   });
@@ -61,6 +67,8 @@ export function useDeleteUser() {
 
 export function useResetUserPassword(id: string) {
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: ResetPasswordInput) => api.post(`/users/${id}/reset-password`, data),
   });
 }
@@ -86,6 +94,8 @@ export function usePermissions() {
 export function useCreateRole() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: RoleInput) => api.post<{ role: RoleItem }>("/roles", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["roles"] }),
   });
@@ -94,6 +104,8 @@ export function useCreateRole() {
 export function useUpdateRole(id: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: UpdateRoleInput) => api.patch<{ role: RoleItem }>(`/roles/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["roles"] }),
   });

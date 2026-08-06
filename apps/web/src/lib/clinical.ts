@@ -42,6 +42,8 @@ function invalidatePatientClinical(qc: ReturnType<typeof useQueryClient>, patien
 export function useCreateConsultation(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: ConsultationInput) =>
       api.post<{ consultation: ConsultationItem }>(`/patients/${patientId}/consultations`, data),
     onSuccess: () => invalidatePatientClinical(qc, patientId),
@@ -51,6 +53,8 @@ export function useCreateConsultation(patientId: string) {
 export function useUpdateConsultation(patientId: string, cid: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: UpdateConsultationInput) =>
       api.patch<{ consultation: ConsultationItem }>(
         `/patients/${patientId}/consultations/${cid}`,
@@ -82,6 +86,8 @@ export function useVitals(patientId: string, sort?: { by: string; dir: "asc" | "
 export function useCreateVital(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: VitalSignInput) =>
       api.post<{ vital: VitalSignItem }>(`/patients/${patientId}/vitals`, data),
     onSuccess: () => invalidatePatientClinical(qc, patientId),

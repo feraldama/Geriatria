@@ -17,9 +17,14 @@ export default function EditarPacientePage() {
   const { toast } = useToast();
 
   async function onSubmit(data: CreatePatientInput) {
-    await update.mutateAsync(data);
-    toast("Cambios guardados");
-    router.replace(`/pacientes/${id}`);
+    try {
+      await update.mutateAsync(data);
+      toast("Cambios guardados");
+      router.replace(`/pacientes/${id}`);
+    } catch (err) {
+      // El formulario ya muestra serverError; acá solo evitamos el rechazo suelto.
+      if (!(err instanceof ApiError)) throw err;
+    }
   }
 
   const serverError =

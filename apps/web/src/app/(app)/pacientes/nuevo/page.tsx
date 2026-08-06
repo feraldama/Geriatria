@@ -15,9 +15,14 @@ export default function NuevoPacientePage() {
   const { toast } = useToast();
 
   async function onSubmit(data: CreatePatientInput) {
-    const res = await create.mutateAsync(data);
-    toast(`Paciente ${res.patient.firstName} ${res.patient.lastName} creado`);
-    router.replace(`/pacientes/${res.patient.id}`);
+    try {
+      const res = await create.mutateAsync(data);
+      toast(`Paciente ${res.patient.firstName} ${res.patient.lastName} creado`);
+      router.replace(`/pacientes/${res.patient.id}`);
+    } catch (err) {
+      // El formulario ya muestra serverError; acá solo evitamos el rechazo suelto.
+      if (!(err instanceof ApiError)) throw err;
+    }
   }
 
   const serverError =

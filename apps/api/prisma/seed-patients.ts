@@ -4,6 +4,7 @@
  * Idempotente por documentId.
  */
 import { PrismaClient } from "@prisma/client";
+import { assertNotProduction } from "./seed-guard.js";
 
 const prisma = new PrismaClient();
 
@@ -74,6 +75,7 @@ const PACIENTES = [
 ];
 
 async function main() {
+  assertNotProduction();
   console.log("🌱 Sembrando pacientes ficticios (solo desarrollo)...");
   const admin = await prisma.user.findFirst({ where: { email: { contains: "admin" } } });
 

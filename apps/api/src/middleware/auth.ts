@@ -10,6 +10,11 @@ import { toAuthenticatedUser, userInclude } from "../lib/serialize.js";
 
 export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
   try {
+    // Varios routers se montan bajo el mismo prefijo (/patients) y cada uno
+    // declara requireAuth; sin esta guarda, una sola petición cargaría el
+    // usuario (con rol y permisos) tres veces desde la base.
+    if (req.user) return next();
+
     const token = req.cookies?.[SESSION_COOKIE];
     if (!token) throw unauthorized("Sesión no encontrada");
 
@@ -25,6 +30,12 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       include: userInclude,
     });
     if (!user) throw unauthorized("Usuario no disponible");
+
+    // Un cambio de contraseña invalida las sesiones abiertas: si el token es
+    // anterior, su versión ya no coincide.
+    if ((payload.ver ?? 0) !== user.tokenVersion) {
+      throw unauthorized("La sesión expiró por un cambio de contraseña");
+    }
 
     req.user = toAuthenticatedUser(user);
     next();

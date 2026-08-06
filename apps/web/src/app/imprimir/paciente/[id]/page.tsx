@@ -23,6 +23,8 @@ import { useScales } from "@/lib/scales";
 import { useSyndromes } from "@/lib/syndromes";
 import { useConsultations } from "@/lib/clinical";
 import { useCarePlan } from "@/lib/extras";
+import { ApiError } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
 /**
  * Resumen imprimible del paciente (para derivaciones o para la familia).
@@ -31,14 +33,28 @@ import { useCarePlan } from "@/lib/extras";
  */
 export default function ResumenImprimiblePage() {
   const { id } = useParams<{ id: string }>();
-  const { data: p } = usePatient(id);
+  const { data: p, isLoading, isError, error, refetch } = usePatient(id);
   const { data: meds } = useMedications(id);
   const { data: scales } = useScales(id);
   const { data: syndromes } = useSyndromes(id);
   const { data: consultations } = useConsultations(id);
   const { data: carePlan } = useCarePlan(id);
 
-  if (!p) return <p className="p-8 text-muted-foreground">Cargando…</p>;
+  if (isLoading) return <p className="p-8 text-muted-foreground">Cargando…</p>;
+
+  // Sin esto, un 403/404/red dejaba la pestaña de impresión cargando para siempre.
+  if (isError || !p) {
+    return (
+      <div className="flex flex-col items-start gap-3 p-8">
+        <p className="text-destructive">
+          {error instanceof ApiError ? error.message : "No se pudo cargar el resumen del paciente."}
+        </p>
+        <Button variant="outline" onClick={() => void refetch()}>
+          Reintentar
+        </Button>
+      </div>
+    );
+  }
 
   const activeMeds = (meds ?? []).filter((m) => m.status === "ACTIVA");
   const latestSyndromes = syndromes?.[0];

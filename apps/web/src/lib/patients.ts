@@ -45,6 +45,8 @@ export function usePatient(id: string) {
 export function useCreatePatient() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: CreatePatientInput) => api.post<PatientResponse>("/patients", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["patients"] }),
   });
@@ -53,6 +55,8 @@ export function useCreatePatient() {
 export function useUpdatePatient(id: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: UpdatePatientInput) => api.patch<PatientResponse>(`/patients/${id}`, data),
     onSuccess: (res) => {
       qc.setQueryData(["patient", id], res);
@@ -64,6 +68,8 @@ export function useUpdatePatient(id: string) {
 export function useDeletePatient() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (id: string) => api.delete(`/patients/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["patients"] }),
   });

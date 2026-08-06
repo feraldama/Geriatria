@@ -1,8 +1,9 @@
 "use client";
 
-import { isSameDay, isSameMonth, isToday, format } from "date-fns";
+import { isSameMonth, isToday, format } from "date-fns";
 import { es } from "date-fns/locale";
 import type { AppointmentItem } from "@geriatria/schemas";
+import { isOnCalendarDay } from "@/lib/calendar";
 import { AppointmentChip } from "./appointment-chip";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +32,7 @@ export function MonthView({ weeks, month, appointments, onSelectDay, onEdit }: M
           {weeks.flat().map((day) => {
             const inMonth = isSameMonth(day, month);
             const dayAppts = appointments
-              .filter((a) => isSameDay(new Date(a.scheduledAt), day))
+              .filter((a) => isOnCalendarDay(a.scheduledAt, day))
               .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
             const visible = dayAppts.slice(0, 3);
             const extra = dayAppts.length - visible.length;

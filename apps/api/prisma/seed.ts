@@ -54,8 +54,10 @@ async function main() {
   }
 
   // 3) Usuario Administrador inicial (credenciales desde env).
+  // Sin ADMIN_PASSWORD no se crea nada: un default conocido daría acceso total
+  // a la historia clínica de todos los pacientes a cualquiera que lo sepa.
   const adminEmail = (process.env.ADMIN_EMAIL ?? "admin@geriatria.local").toLowerCase();
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "Admin12345";
+  const adminPassword = process.env.ADMIN_PASSWORD;
   const adminName = process.env.ADMIN_NAME ?? "Administrador";
 
   const adminRole = await prisma.role.findUniqueOrThrow({
@@ -66,6 +68,12 @@ async function main() {
   if (existing) {
     console.log(`   • El admin ${adminEmail} ya existe; no se modifica.`);
   } else {
+    if (!adminPassword || adminPassword.length < 12) {
+      throw new Error(
+        "Definí ADMIN_PASSWORD (mínimo 12 caracteres) para crear el administrador inicial. " +
+          "No existe una contraseña por defecto.",
+      );
+    }
     await prisma.user.create({
       data: {
         email: adminEmail,

@@ -129,13 +129,15 @@ export function MedicationForm({ patientId, initial, onSuccess, onCancel }: Medi
           </Select>
         </Field>
         <Field label="Fecha de inicio" htmlFor="m-start" hint="dd/mm/aaaa" error={errors.startDate?.message}>
-          <Controller
-            control={control}
-            name="startDate"
-            render={({ field }) => (
-              <DateInput id="m-start" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.startDate} />
-            )}
-          />
+          {(aria) => (
+            <Controller
+              control={control}
+              name="startDate"
+              render={({ field }) => (
+                <DateInput id="m-start" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.startDate} {...aria} />
+              )}
+            />
+          )}
         </Field>
         <Field label="Indicado por" htmlFor="m-by" className="sm:col-span-2" error={errors.prescribedBy?.message}>
           <Input id="m-by" {...register("prescribedBy")} />

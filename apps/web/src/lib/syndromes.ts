@@ -34,6 +34,8 @@ export function useSyndrome(patientId: string, sid: string) {
 export function useApplySyndrome(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: ApplySyndromeInput) =>
       api.post<{ assessment: SyndromeAssessmentItem }>(`/patients/${patientId}/syndromes`, data),
     onSuccess: () => {

@@ -11,6 +11,7 @@ import {
   PERMISSIONS,
   type DocumentItem,
 } from "@geriatria/schemas";
+import { ApiError } from "@/lib/api";
 import { useDocuments, useDeleteDocument, documentFileUrl } from "@/lib/documents";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { useToast } from "@/components/ui/toast";
@@ -36,9 +37,13 @@ export default function DocumentosPage() {
 
   async function onConfirmDelete() {
     if (!toDelete) return;
-    await del.mutateAsync(toDelete.id);
-    toast("Documento eliminado");
-    setToDelete(null);
+    try {
+      await del.mutateAsync(toDelete.id);
+      toast("Documento eliminado");
+      setToDelete(null);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "No se pudo eliminar el documento", "error");
+    }
   }
 
   const previewKind = preview ? isPreviewable(preview.mimeType) : null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, Controller, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,6 +25,7 @@ import { TimeInput } from "@/components/ui/time-input";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { scrollToFirstError } from "@/lib/scroll-to-error";
+import { useUnsavedChanges, confirmDiscard } from "@/lib/use-unsaved-changes";
 
 interface VitalsValues {
   systolic: string;
@@ -82,13 +83,16 @@ export function ConsultationForm({ patientId, appointmentId, initial }: Consulta
   const setExamField = (id: string, value: string) =>
     setExam((prev) => ({ ...prev, [id]: value }));
 
+  // El instante inicial se toma en el render (servidor y cliente coinciden en
+  // hora de la clínica) y se refresca al montar, por si pasó un minuto.
   const now = new Date();
   const {
     register,
     control,
     watch,
     handleSubmit,
-    formState: { errors },
+    setValue,
+    formState: { errors, isDirty, isSubmitSuccessful },
   } = useForm<FormValues>({
     resolver: zodResolver(consultationSchema) as unknown as Resolver<FormValues>,
     mode: "onTouched",
@@ -113,6 +117,22 @@ export function ConsultationForm({ patientId, appointmentId, initial }: Consulta
           vitals: emptyVitals,
         },
   });
+
+  // Al crear una consulta nueva, ajusta fecha y hora al momento real de
+  // apertura. En edición se respeta la fecha de la consulta.
+  useEffect(() => {
+    if (initial) return;
+    const ahora = new Date();
+    setValue("date", formatDate(ahora));
+    setValue("time", formatTime(ahora));
+    // Solo al montar: después manda lo que escriba el usuario.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // El examen físico vive fuera de RHF, así que también cuenta como "sucio".
+  const examDirty = JSON.stringify(exam) !== JSON.stringify(initial?.physicalExam ?? {});
+  const dirty = (isDirty || examDirty) && !isSubmitSuccessful;
+  useUnsavedChanges(dirty);
 
   // Vista previa del IMC en vivo a partir de peso y talla.
   const weight = Number(watch("vitals.weight")) || null;
@@ -178,22 +198,26 @@ export function ConsultationForm({ patientId, appointmentId, initial }: Consulta
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field label="Fecha" htmlFor="date" required error={errors.date?.message} hint="dd/mm/aaaa">
-            <Controller
-              control={control}
-              name="date"
-              render={({ field }) => (
-                <DateInput id="date" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.date} />
-              )}
-            />
+            {(aria) => (
+              <Controller
+                control={control}
+                name="date"
+                render={({ field }) => (
+                  <DateInput id="date" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.date} {...aria} />
+                )}
+              />
+            )}
           </Field>
           <Field label="Hora" htmlFor="time" error={errors.time?.message} hint="24h (opcional)">
-            <Controller
-              control={control}
-              name="time"
-              render={({ field }) => (
-                <TimeInput id="time" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.time} />
-              )}
-            />
+            {(aria) => (
+              <Controller
+                control={control}
+                name="time"
+                render={({ field }) => (
+                  <TimeInput id="time" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.time} {...aria} />
+                )}
+              />
+            )}
           </Field>
         </CardContent>
       </Card>
@@ -288,7 +312,11 @@ export function ConsultationForm({ patientId, appointmentId, initial }: Consulta
         <Button
           type="button"
           variant="outline"
-          onClick={() => router.push(`/pacientes/${patientId}/consultas`)}
+          onClick={() => {
+            // Igual que la ficha de paciente: Cancelar no debe descartar una
+            // consulta a medio escribir sin preguntar.
+            if (!dirty || confirmDiscard()) router.push(`/pacientes/${patientId}/consultas`);
+          }}
           disabled={mutation.isPending}
         >
           Cancelar

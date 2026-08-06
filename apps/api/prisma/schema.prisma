@@ -36,6 +36,10 @@ model User {
   lockedUntil         DateTime?
   lastLoginAt         DateTime?
 
+  // Se incrementa al cambiar/restablecer la contraseña: invalida los JWT
+  // emitidos antes (el token lleva la versión y se compara en cada request).
+  tokenVersion Int @default(0)
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -44,8 +48,20 @@ model User {
   createdBy   User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
   createdUsers User[] @relation("UserCreatedBy")
 
-  createdPatients     Patient[]     @relation("PatientCreatedBy")
-  createdAppointments Appointment[] @relation("AppointmentCreatedBy")
+  // Autoría de los registros clínicos: relaciones reales (no ids sueltos), para
+  // que el "quién lo registró" tenga integridad referencial.
+  createdPatients            Patient[]              @relation("PatientCreatedBy")
+  createdAppointments        Appointment[]          @relation("AppointmentCreatedBy")
+  createdConsultations       Consultation[]         @relation("ConsultationCreatedBy")
+  editedConsultationRevs     ConsultationRevision[] @relation("ConsultationRevisionEditedBy")
+  createdVitalSigns          VitalSign[]            @relation("VitalSignCreatedBy")
+  createdMedications         Medication[]           @relation("MedicationCreatedBy")
+  createdDocuments           Document[]             @relation("DocumentCreatedBy")
+  createdScales              AssessmentScale[]      @relation("AssessmentScaleCreatedBy")
+  createdSyndromeAssessments SyndromeAssessment[]   @relation("SyndromeAssessmentCreatedBy")
+  createdLanguageAssessments LanguageAssessment[]   @relation("LanguageAssessmentCreatedBy")
+  createdVaccinations        Vaccination[]          @relation("VaccinationCreatedBy")
+  createdCarePlans           CarePlan[]             @relation("CarePlanCreatedBy")
 
   auditLogs AuditLog[]
 
@@ -77,6 +93,7 @@ model Permission {
   roles RolePermission[]
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 }
 
 // Tabla puente N–N entre Role y Permission (permisos editables sin tocar código).
@@ -261,19 +278,26 @@ model Patient {
   deletedAt DateTime?
 
   createdById String?
-  createdBy   User?   @relation("PatientCreatedBy", fields: [createdById], references: [id])
+  createdBy   User?   @relation("PatientCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([lastName, firstName])
+  // El listado siempre filtra por deletedAt y ordena por apellido/nombre.
+  @@index([deletedAt, lastName, firstName])
   @@index([documentId])
-  @@index([searchText])
-  @@index([deletedAt])
+  // ⚠️  Hay índices que Prisma no puede expresar y viven solo en SQL:
+  //   · Patient_searchText_trgm_idx  (GIN/pg_trgm; searchText se busca con LIKE '%…%')
+  //   · Patient_documentId_active_key (único parcial sobre pacientes vigentes)
+  //   · User_name_trgm_idx / User_email_trgm_idx
+  // Están en la migración 20260806000000_hardening_auditoria_indices. Prisma los
+  // ve como "de más" y un `prisma migrate dev` genera una migración que los
+  // ELIMINA: si eso pasa, borrá esos DROP INDEX del SQL antes de aplicarlo.
+  // Hay un test que lo verifica (src/prisma-indexes.test.ts).
 }
 
 // Cuidador / red de apoyo (clave en geriatría). Un paciente puede tener varios.
 model Caregiver {
   id           String  @id @default(cuid())
   patientId    String
-  patient      Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient      Patient @relation(fields: [patientId], references: [id])
   name         String
   relationship String? // parentesco
   phone        String?
@@ -281,42 +305,47 @@ model Caregiver {
   isPrimary    Boolean @default(false) // ¿cuidador principal?
   notes        String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  @@index([patientId])
+  @@index([patientId, deletedAt])
 }
 
 // Condición crónica / comorbilidad.
 model Condition {
   id        String   @id @default(cuid())
   patientId String
-  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient   Patient  @relation(fields: [patientId], references: [id])
   name      String
   since     DateTime? // desde cuándo (aproximado)
   active    Boolean  @default(true)
   notes     String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  @@index([patientId])
+  @@index([patientId, deletedAt])
 }
 
 // Alergia. Siempre se resalta en rojo en la interfaz.
+// Nunca se borra físicamente: saber cuándo se quitó una alergia es un dato de
+// seguridad del paciente.
 model Allergy {
   id        String           @id @default(cuid())
   patientId String
-  patient   Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient   Patient          @relation(fields: [patientId], references: [id])
   substance String // sustancia / fármaco
   reaction  String?
   severity  AllergySeverity?
   notes     String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  @@index([patientId])
+  @@index([patientId, deletedAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -341,15 +370,15 @@ model Appointment {
   deletedAt DateTime?
 
   createdById String?
-  createdBy   User?   @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
+  createdBy   User?   @relation("AppointmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   // Una cita puede tener (opcionalmente) su consulta asociada (1–1).
   consultation Consultation?
 
-  @@index([scheduledAt])
-  @@index([patientId])
+  // La agenda consulta por rango de fechas sobre las citas vigentes.
+  @@index([deletedAt, scheduledAt])
+  @@index([patientId, deletedAt, scheduledAt])
   @@index([status])
-  @@index([deletedAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -378,14 +407,41 @@ model Consultation {
 
   vitalSigns VitalSign[]
 
+  // Historial de versiones: cada edición archiva el estado anterior.
+  revisions ConsultationRevision[]
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
-  createdById String? // id del autor (sin relación; auditoría en AuditLog)
+  createdById String?
+  createdBy   User?     @relation("ConsultationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([patientId])
-  @@index([date])
-  @@index([deletedAt])
+  @@index([patientId, deletedAt, date])
+  @@index([createdById])
+}
+
+// Copia inmutable del estado previo de una consulta antes de cada edición.
+// La historia clínica no se sobrescribe: se versiona.
+model ConsultationRevision {
+  id String @id @default(cuid())
+
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id])
+
+  // Estado ANTERIOR a la edición que originó esta revisión.
+  date         DateTime
+  subjective   String?  @db.Text
+  objective    String?  @db.Text
+  assessment   String?  @db.Text
+  plan         String?  @db.Text
+  physicalExam Json?
+
+  // Quién hizo la edición y cuándo.
+  editedAt   DateTime @default(now())
+  editedById String?
+  editedBy   User?    @relation("ConsultationRevisionEditedBy", fields: [editedById], references: [id], onDelete: Restrict)
+
+  @@index([consultationId, editedAt])
 }
 
 // Registro de signos vitales (con seguimiento en el tiempo).
@@ -398,27 +454,32 @@ model VitalSign {
   consultationId String?
   consultation   Consultation? @relation(fields: [consultationId], references: [id])
 
+  // Medidas clínicas en Decimal (no Float): se comparan y grafican, y el
+  // redondeo binario introduciría ruido en las curvas de peso/IMC.
   measuredAt        DateTime @default(now())
   systolic          Int? // PA sistólica (mmHg)
   diastolic         Int? // PA diastólica (mmHg)
   heartRate         Int? // FC (lpm)
   respiratoryRate   Int? // FR (rpm)
-  temperature       Float? // Tº (°C)
+  temperature       Decimal? @db.Decimal(4, 1) // Tº (°C)
   oxygenSat         Int? // SatO2 (%)
-  weight            Float? // peso (kg)
-  height            Float? // talla (cm)
-  bmi               Float? // IMC (calculado)
-  calfCircumference Float? // circunferencia de pantorrilla (cm)
+  weight            Decimal? @db.Decimal(5, 2) // peso (kg)
+  height            Decimal? @db.Decimal(5, 2) // talla (cm)
+  bmi               Decimal? @db.Decimal(5, 2) // IMC (calculado)
+  calfCircumference Decimal? @db.Decimal(5, 2) // circunferencia de pantorrilla (cm)
   bloodGlucose      Int? // glicemia capilar (mg/dL)
-  gripStrength      Float? // fuerza de agarre / dinamómetro (kg)
+  gripStrength      Decimal? @db.Decimal(5, 2) // fuerza de agarre / dinamómetro (kg)
   notes             String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
   createdById String?
+  createdBy   User?     @relation("VitalSignCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([patientId])
-  @@index([measuredAt])
+  @@index([patientId, deletedAt, measuredAt])
+  @@index([consultationId])
+  @@index([createdById])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -450,10 +511,10 @@ model Medication {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
   createdById String?
+  createdBy   User?     @relation("MedicationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([patientId])
-  @@index([status])
-  @@index([deletedAt])
+  @@index([patientId, deletedAt, status])
+  @@index([createdById])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -474,7 +535,7 @@ model Document {
   fileName  String // nombre original
   storedPath String // ruta relativa en el almacenamiento
   mimeType  String
-  size      Int // bytes
+  size      Int // bytes (acotado por MAX_UPLOAD_MB, muy por debajo de 2 GB)
 
   notes String?
 
@@ -482,10 +543,11 @@ model Document {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
   createdById String?
+  createdBy   User?     @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([patientId])
+  @@index([patientId, deletedAt, studyDate])
   @@index([category])
-  @@index([deletedAt])
+  @@index([createdById])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -510,10 +572,11 @@ model AssessmentScale {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
   createdById String?
+  createdBy   User?     @relation("AssessmentScaleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([patientId])
+  @@index([patientId, deletedAt, type, appliedAt])
   @@index([type])
-  @@index([deletedAt])
+  @@index([createdById])
 }
 
 // Evaluación de síndromes geriátricos: foto fechada con los síndromes
@@ -533,10 +596,10 @@ model SyndromeAssessment {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
   createdById String?
+  createdBy   User?     @relation("SyndromeAssessmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([patientId])
-  @@index([assessedAt])
-  @@index([deletedAt])
+  @@index([patientId, deletedAt, assessedAt])
+  @@index([createdById])
 }
 
 // Evaluación de lenguaje/cognición con láminas: nominación de imágenes,
@@ -557,10 +620,10 @@ model LanguageAssessment {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
   createdById String?
+  createdBy   User?     @relation("LanguageAssessmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([patientId])
-  @@index([assessedAt])
-  @@index([deletedAt])
+  @@index([patientId, deletedAt, assessedAt])
+  @@index([createdById])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -582,10 +645,11 @@ model Vaccination {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
   createdById String?
+  createdBy   User?     @relation("VaccinationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([patientId])
+  @@index([patientId, deletedAt, doseDate])
   @@index([nextDoseDate])
-  @@index([deletedAt])
+  @@index([createdById])
 }
 
 // Plan de cuidados activo (uno por paciente).
@@ -600,9 +664,14 @@ model CarePlan {
   nextControls    String?   @db.Text
   nextControlDate DateTime? // próximo control (para alertas)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
   createdById String?
+  createdBy   User?     @relation("CarePlanCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([nextControlDate])
+  @@index([createdById])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -632,4 +701,6 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
+  // "Historial de este recurso": la consulta natural al investigar un incidente.
+  @@index([resource, resourceId, createdAt])
 }

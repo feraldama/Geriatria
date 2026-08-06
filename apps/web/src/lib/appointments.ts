@@ -48,6 +48,8 @@ function invalidateAgenda(qc: ReturnType<typeof useQueryClient>) {
 export function useCreateAppointment() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: CreateAppointmentInput) =>
       api.post<AppointmentResponse>("/appointments", data),
     onSuccess: () => invalidateAgenda(qc),
@@ -57,6 +59,8 @@ export function useCreateAppointment() {
 export function useUpdateAppointment(id: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: UpdateAppointmentInput) =>
       api.patch<AppointmentResponse>(`/appointments/${id}`, data),
     onSuccess: () => invalidateAgenda(qc),
@@ -67,6 +71,8 @@ export function useUpdateAppointment(id: string) {
 export function useUpdateAppointmentStatus() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: ({ id, status }: { id: string; status: AppointmentStatus }) =>
       api.patch<AppointmentResponse>(`/appointments/${id}`, { status }),
     onSuccess: () => invalidateAgenda(qc),
@@ -76,6 +82,8 @@ export function useUpdateAppointmentStatus() {
 export function useDeleteAppointment() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (id: string) => api.delete(`/appointments/${id}`),
     onSuccess: () => invalidateAgenda(qc),
   });

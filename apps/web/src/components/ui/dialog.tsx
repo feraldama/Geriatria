@@ -17,7 +17,15 @@ interface DialogProps {
    * guardar conviene `false` (evita perder lo cargado por un clic accidental).
    */
   closeOnBackdrop?: boolean;
+  /**
+   * Si Escape cierra el diálogo. Con un formulario a medio cargar conviene
+   * `false`: Escape descartaría todo sin confirmación.
+   */
+  closeOnEscape?: boolean;
 }
+
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Modal accesible y reutilizable: role="dialog", aria-modal, trampa de foco,
@@ -32,33 +40,54 @@ export function Dialog({
   children,
   maxWidth = "max-w-2xl",
   closeOnBackdrop = true,
+  closeOnEscape = true,
 }: DialogProps) {
   const panelRef = React.useRef<HTMLDivElement>(null);
+  // Los ids se generan por instancia: dos diálogos montados a la vez no pueden
+  // compartir "dialog-title" (rompería aria-labelledby y el scroll a errores).
+  const baseId = React.useId();
+  const titleId = `${baseId}-title`;
+  const descId = `${baseId}-desc`;
 
+  // onClose suele llegar como arrow inline, que cambia en cada render del
+  // padre. Guardarla en una ref evita que los efectos se reejecuten y le roben
+  // el foco al usuario mientras escribe.
+  const onCloseRef = React.useRef(onClose);
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  // Foco inicial y bloqueo del scroll: solo al abrir y cerrar.
   React.useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    // Enfocamos el primer elemento enfocable del panel.
-    const focusFirst = () => {
-      const f = panelRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      f?.focus();
-    };
-    focusFirst();
+    // Preferimos el primer campo editable; el botón "Cerrar" es el último
+    // recurso (enfocarlo obligaría a tabular hasta el formulario).
+    const panel = panelRef.current;
+    const firstInput = panel?.querySelector<HTMLElement>(
+      'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])',
+    );
+    (firstInput ?? panel?.querySelector<HTMLElement>(FOCUSABLE))?.focus();
 
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
+    };
+  }, [open]);
+
+  // Escape y trampa de foco.
+  React.useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        if (closeOnEscape) onCloseRef.current();
         return;
       }
       if (e.key === "Tab") {
-        const nodes = panelRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        );
+        const nodes = panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
         if (!nodes || nodes.length === 0) return;
         const first = nodes[0]!;
         const last = nodes[nodes.length - 1]!;
@@ -72,12 +101,8 @@ export function Dialog({
       }
     };
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previousOverflow;
-      previouslyFocused?.focus?.();
-    };
-  }, [open, onClose]);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, closeOnEscape]);
 
   if (!open) return null;
 
@@ -92,18 +117,18 @@ export function Dialog({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="dialog-title"
-        aria-describedby={description ? "dialog-desc" : undefined}
+        aria-labelledby={titleId}
+        aria-describedby={description ? descId : undefined}
         className={`relative my-4 w-full ${maxWidth} animate-fade-in rounded-lg border border-border bg-card shadow-lg`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
           <div>
-            <h2 id="dialog-title" className="font-heading text-lg font-semibold">
+            <h2 id={titleId} className="font-heading text-lg font-semibold">
               {title}
             </h2>
             {description && (
-              <p id="dialog-desc" className="mt-1 text-sm text-muted-foreground">
+              <p id={descId} className="mt-1 text-sm text-muted-foreground">
                 {description}
               </p>
             )}

@@ -14,11 +14,19 @@ import { env } from "../env.js";
 
 const ROOT = path.resolve(env.STORAGE_DIR);
 
+// Los ids de paciente son cuids (alfanuméricos). Todo lo demás (../, %2f, etc.)
+// se rechaza antes de tocar el filesystem.
+const SAFE_ID = /^[a-z0-9]{20,36}$/i;
+
+/** Valida que un id sea usable como nombre de carpeta (cuid, sin separadores). */
+export function assertSafeId(id: string): string {
+  if (!SAFE_ID.test(id)) throw new Error("Identificador inválido");
+  return id;
+}
+
 /** Asegura y devuelve el directorio absoluto de un paciente. */
 function patientDir(patientId: string): string {
-  // patientId es un cuid generado por nosotros (sin separadores de ruta),
-  // así que es seguro usarlo como nombre de carpeta.
-  const dir = path.join(ROOT, patientId);
+  const dir = path.join(ROOT, assertSafeId(patientId));
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -26,7 +34,10 @@ function patientDir(patientId: string): string {
 /** Ruta relativa (a STORAGE_DIR) → ruta absoluta, validando que no escape. */
 export function absolutePath(relativePath: string): string {
   const abs = path.resolve(ROOT, relativePath);
-  if (!abs.startsWith(ROOT + path.sep)) {
+  // path.relative es robusto ante diferencias de mayúsculas/separadores en
+  // Windows; si la ruta escapa de ROOT, empieza con ".." o es absoluta.
+  const rel = path.relative(ROOT, abs);
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
     throw new Error("Ruta de archivo inválida");
   }
   return abs;
@@ -69,7 +80,7 @@ const storage = multer.diskStorage({
 /** Middleware de subida de un único archivo (campo "file"). */
 export const uploadSingle: RequestHandler = multer({
   storage,
-  limits: { fileSize: env.MAX_UPLOAD_MB * 1024 * 1024 },
+  limits: { fileSize: env.MAX_UPLOAD_MB * 1024 * 1024, files: 1, fields: 10 },
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_MIME.has(file.mimetype)) cb(null, true);
     else cb(new Error(`Tipo de archivo no permitido: ${file.mimetype}`));

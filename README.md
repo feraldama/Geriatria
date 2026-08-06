@@ -72,7 +72,8 @@ docker-compose.yml  → Postgres + Adminer (opcional; ver más abajo)
 
 ## Requisitos
 
-- **Node.js ≥ 20** y **pnpm ≥ 9** (`npm i -g pnpm`)
+- **Node.js 20** (ver `.nvmrc`; es la versión con la que se construyen las imágenes)
+- **pnpm 11.8** (`corepack enable && corepack prepare pnpm@11.8.0 --activate`)
 - **PostgreSQL** accesible (local, remoto, o vía Docker)
 - **Python 3** (solo para usar la skill de diseño; opcional)
 
@@ -89,7 +90,10 @@ crea una base `geriatria` y apuntá `DATABASE_URL` a ella (ver paso 2).
 
 ```bash
 docker compose up -d
-# Postgres queda en localhost:5433, Adminer en http://localhost:8080
+# Postgres queda en 127.0.0.1:5433 (solo loopback)
+
+# Adminer (panel de administración de la base) no arranca por defecto:
+docker compose --profile tools up -d adminer   # http://127.0.0.1:8080
 ```
 
 > En **producción**, la infraestructura (Postgres, TLS/HTTPS, respaldos) la
@@ -105,9 +109,16 @@ cp apps/web/.env.example apps/web/.env.local
 
 Editá `apps/api/.env`:
 - `DATABASE_URL` → tu conexión a Postgres
-- `JWT_SECRET` → un secreto largo y aleatorio (`openssl rand -base64 48`)
-- `COOKIE_SECURE` → `true` solo si servís por HTTPS
-- `ADMIN_EMAIL` / `ADMIN_PASSWORD` → credenciales del admin inicial
+- `JWT_SECRET` → un secreto largo y aleatorio, mínimo 32 caracteres
+  (`openssl rand -base64 48`)
+- `COOKIE_SECURE` → `true` solo si servís por HTTPS (si se omite, se deduce del
+  entorno: `true` en producción)
+- `TRUST_PROXY` → `true` **solo** si hay un reverse proxy delante
+- `MAX_UPLOAD_MB` → tamaño máximo por documento subido (25 por defecto)
+- `ADMIN_EMAIL` / `ADMIN_PASSWORD` → credenciales del admin inicial.
+  **`ADMIN_PASSWORD` no tiene valor por defecto**: el seed falla si no la
+  definís (mínimo 12 caracteres). Una contraseña de administrador conocida
+  daría acceso total a la historia clínica de todos los pacientes.
 
 ### 3. Instalar dependencias
 
@@ -149,9 +160,15 @@ Entrá a **http://localhost:3028**, iniciá sesión con el `ADMIN_EMAIL` /
 - Los permisos se validan en el backend (RBAC) en cada endpoint.
 
 ```bash
-pnpm typecheck    # chequeo de tipos de todo el monorepo
-pnpm test         # tests (API)
+pnpm typecheck      # chequeo de tipos de todo el monorepo
+pnpm lint           # ESLint
+pnpm test           # tests (API + schemas compartidos)
+pnpm format         # formatea con Prettier
+pnpm format:check   # verifica formato sin escribir
 ```
+
+Estos mismos pasos corren en CI (`.github/workflows/ci.yml`) en cada push y
+pull request, junto con el build de las imágenes Docker.
 
 ## Despliegue (producción)
 
@@ -164,17 +181,37 @@ y reenvía `/api/v1/*` al backend por la red interna; el operador coloca un
 Stack completo con Docker:
 
 ```bash
-# 1) Definí los secretos en un archivo .env junto al compose:
-#    POSTGRES_PASSWORD, JWT_SECRET, CORS_ORIGIN=https://tu-dominio,
-#    COOKIE_SECURE=true, ADMIN_EMAIL, ADMIN_PASSWORD
+# 1) Definí los secretos en un archivo .env junto al compose. Son obligatorios
+#    (el compose falla si faltan): POSTGRES_PASSWORD, JWT_SECRET, CORS_ORIGIN,
+#    ADMIN_PASSWORD.
 # 2) Construí y levantá:
 docker compose -f docker-compose.prod.yml up -d --build
-# 3) Crear el administrador inicial (una vez):
+# 3) Aplicá las migraciones (después del respaldo, ver abajo):
+docker compose -f docker-compose.prod.yml run --rm migrate
+# 4) Creá el administrador inicial (una sola vez):
 docker compose -f docker-compose.prod.yml exec api pnpm db:seed
 ```
 
-- Las **migraciones** se aplican solas al arrancar el contenedor de la API
-  (`prisma migrate deploy`).
+- Las **migraciones** NO se aplican al arrancar la API: van en el servicio
+  one-shot `migrate`, para que se ejecuten después del respaldo y no se solapen
+  si el contenedor se reinicia en bucle. **Hacé un respaldo antes de cada
+  `migrate`.**
+- ⚠️ **Antes de aplicar la migración `20260806000000_hardening_auditoria_indices`
+  por primera vez**, verificá que no haya cédulas repetidas: esa migración crea
+  un índice único y, si hay duplicados, Postgres revierte la migración completa.
+
+  ```sql
+  SELECT "documentId", count(*)
+  FROM "Patient"
+  WHERE "documentId" IS NOT NULL AND "deletedAt" IS NULL
+  GROUP BY "documentId" HAVING count(*) > 1;
+  ```
+
+  Cada grupo hay que resolverlo a mano (fusionar las fichas o dar de baja la
+  incorrecta): unificar historias clínicas no es algo que deba hacer un script.
+- El puerto público de `web` se publica **solo en loopback**
+  (`127.0.0.1:3028`): el reverse proxy con TLS del operador es el único punto de
+  entrada. Para exponerlo en otra interfaz, definí `WEB_BIND`.
 - La cookie de sesión usa el flag **`Secure` configurable** (`COOKIE_SECURE=true`
   cuando hay HTTPS) y **`CORS` restringido** al dominio del frontend.
 - Los **documentos subidos** persisten en el volumen `storage`; los **respaldos**
@@ -196,13 +233,32 @@ tocar código (se gestionarán desde la UI en la Fase 7).
 
 ## Notas de seguridad (nivel aplicación)
 
-- Contraseñas con bcrypt; sesión JWT en cookie `httpOnly` + `SameSite=Lax`,
-  flag `Secure` configurable por env.
-- RBAC validado en el backend en cada endpoint.
-- Helmet, CORS restringido al dominio del frontend, rate limiting (general y en
-  `/auth/login`), bloqueo temporal por fuerza bruta.
-- Borrado lógico (`deletedAt`), nunca físico, en usuarios e historias clínicas.
-- Registro de auditoría (incluye intentos de login).
+- Contraseñas con bcrypt; sesión JWT (HS256, con issuer/audience fijos) en
+  cookie `httpOnly` + `SameSite=Lax`, flag `Secure` según entorno.
+- Cambiar o restablecer la contraseña **invalida las sesiones abiertas**
+  (el token lleva una versión que se compara en cada petición).
+- RBAC validado en el backend en cada endpoint. Un test recorre todas las rutas
+  registradas y falla si alguna queda sin `requireAuth` o sin permiso.
+- Nadie puede otorgar permisos que no tiene, editar los roles del sistema,
+  modificar su propio rol ni dejar la instalación sin administradores.
+- Helmet en la API y CSP + `frame-ancestors: none` en las páginas de Next;
+  CORS restringido al dominio del frontend; rate limiting general, de login y
+  de cambio/restablecimiento de contraseña; bloqueo temporal por fuerza bruta
+  con contador atómico en la base.
+- Los documentos subidos se validan por tipo y tamaño, se guardan bajo un id
+  verificado (sin recorrido de rutas) y se sirven con `nosniff` y CSP `sandbox`.
+- Borrado lógico (`deletedAt`), nunca físico, en usuarios, historias clínicas y
+  sub-entidades del paciente (alergias, condiciones, cuidadores).
+- Las consultas se **versionan**: cada edición archiva el estado anterior en
+  `ConsultationRevision` antes de sobrescribir.
+- Registro de auditoría con el **antes/después** de cada modificación, además
+  de los accesos de lectura a datos clínicos y los intentos de login.
+
+### Endurecimiento pendiente (a cargo del operador)
+
+- **Respaldos** de la base y del volumen `storage`, con prueba de restauración.
+- Hacer la tabla `AuditLog` de solo-inserción para el usuario de la aplicación:
+  `REVOKE UPDATE, DELETE ON "AuditLog" FROM <usuario_app>;`
 
 ---
 

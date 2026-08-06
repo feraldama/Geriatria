@@ -75,11 +75,19 @@ export const VITAL_FIELDS = [
   { key: "gripStrength", label: "Fuerza de agarre", unit: "kg" },
 ] as const;
 
+/**
+ * IMC máximo representable. La columna es `Decimal(5,2)`; un valor mayor haría
+ * fallar el guardado con datos que el formulario acepta (p. ej. talla 30 cm),
+ * y un IMC de tres cifras ya es un error de carga, no una medición.
+ */
+export const MAX_BMI = 999.9;
+
 /** Calcula el IMC a partir de peso (kg) y talla (cm). Null si falta alguno. */
 export function calculateBMI(weight: number | null, height: number | null): number | null {
   if (!weight || !height) return null;
   const m = height / 100;
-  return Math.round((weight / (m * m)) * 10) / 10;
+  const bmi = Math.round((weight / (m * m)) * 10) / 10;
+  return Math.min(bmi, MAX_BMI);
 }
 
 // ─── Consultas (SOAP) ──────────────────────────────────────────────────────

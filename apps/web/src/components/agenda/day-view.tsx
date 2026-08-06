@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { isSameDay } from "date-fns";
+
 import {
   formatTime,
   APPOINTMENT_TYPE_LABELS,
@@ -9,6 +9,7 @@ import {
   type AppointmentItem,
   type AppointmentStatus,
 } from "@geriatria/schemas";
+import { isOnCalendarDay } from "@/lib/calendar";
 import { STATUS_BADGE_VARIANT } from "@/lib/appointment-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,7 @@ export function DayView({
   onRegisterConsultation,
 }: DayViewProps) {
   const items = appointments
-    .filter((a) => isSameDay(new Date(a.scheduledAt), date))
+    .filter((a) => isOnCalendarDay(a.scheduledAt, date))
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 
   if (items.length === 0) {

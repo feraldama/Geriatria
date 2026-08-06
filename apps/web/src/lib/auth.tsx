@@ -35,6 +35,8 @@ export function useCurrentUser() {
 export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (input: LoginInput) => api.post<MeResponse>("/auth/login", input),
     onSuccess: (data) => qc.setQueryData(["me"], data.user),
   });
@@ -43,6 +45,8 @@ export function useLogin() {
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: () => api.post("/auth/logout"),
     onSuccess: () => qc.setQueryData(["me"], null),
   });
@@ -52,6 +56,8 @@ export function useLogout() {
 export function useUpdateProfile() {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: UpdateProfileInput) => api.patch<MeResponse>("/profile", data),
     onSuccess: (data) => qc.setQueryData(["me"], data.user),
   });
@@ -60,6 +66,8 @@ export function useUpdateProfile() {
 /** Cambia la propia contraseña. */
 export function useChangePassword() {
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: ChangePasswordInput) => api.patch("/auth/password", data),
   });
 }

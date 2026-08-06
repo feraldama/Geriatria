@@ -7,13 +7,25 @@
 # Uso:
 #   1) Definí los secretos en un .env (ver variables ${...} abajo).
 #   2) docker compose -f docker-compose.prod.yml up -d --build
-#   3) El primer arranque aplica migraciones. Para crear el admin inicial:
+#   3) Aplicá migraciones y creá el admin inicial:
+#      docker compose -f docker-compose.prod.yml run --rm migrate
 #      docker compose -f docker-compose.prod.yml exec api pnpm db:seed
+
+# Bloque reutilizable: límite de tamaño de logs para que no llenen el disco del
+# servidor de la clínica.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
   db:
     image: postgres:18-alpine
     restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?definí POSTGRES_PASSWORD}
@@ -26,11 +38,33 @@ services:
       timeout: 5s
       retries: 5
 
+  # Servicio one-shot para aplicar migraciones. Se ejecuta manualmente (o desde
+  # el script de despliegue) DESPUÉS del backup, nunca desde el arranque de la
+  # API: con reinicios en bucle o más de una réplica se solaparían.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: "no"
+    profiles: ["tools"]
+    working_dir: /app/apps/api
+    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-geriatria}?schema=public
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:?definí JWT_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-geriatria}?schema=public
       NODE_ENV: production
@@ -40,12 +74,23 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
       # Activar Secure cuando se sirva por HTTPS (reverse proxy del operador).
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # La API está detrás del proxy `web`: sin esto el rate limit y la
+      # auditoría verían siempre la IP del contenedor, no la del cliente.
+      TRUST_PROXY: ${TRUST_PROXY:-true}
       CORS_ORIGIN: ${CORS_ORIGIN:?dominio del frontend, ej. https://geriatria.midominio.com}
       STORAGE_DIR: /data/storage
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@geriatria.local}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin12345}
+      # Sin default a propósito: una contraseña de admin conocida da acceso
+      # total a la historia clínica de todos los pacientes.
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?definí ADMIN_PASSWORD (mínimo 12 caracteres)}
     volumes:
       - storage:/data/storage
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3027/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy
@@ -55,14 +100,25 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
     environment:
       # Proxy server-side hacia la API (red interna de Docker).
       API_INTERNAL_URL: http://api:3027
     ports:
-      # Punto de entrada público. El operador pone TLS por delante.
-      - "${WEB_PORT:-3028}:3028"
+      # Solo loopback: el reverse proxy con TLS del operador es el único punto
+      # de entrada. Publicarlo en 0.0.0.0 permitiría saltearse el TLS.
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3028}:3028"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3028/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata:

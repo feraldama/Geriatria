@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useForm, Controller, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -20,6 +21,7 @@ import { useCreateAppointment, useUpdateAppointment } from "@/lib/appointments";
 import { ApiError } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { PatientCombobox } from "@/components/patient-combobox";
+import { PatientQuickCreate } from "@/components/patient-quick-create";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -54,6 +56,8 @@ export function AppointmentForm({ initial, defaultDate, onSuccess, onCancel }: A
   const create = useCreateAppointment();
   const update = useUpdateAppointment(initial?.id ?? "");
   const isEdit = !!initial;
+  // Texto buscado cuando se pidió crear un paciente nuevo; null = combobox.
+  const [quickCreateQuery, setQuickCreateQuery] = useState<string | null>(null);
 
   const {
     register,
@@ -119,55 +123,77 @@ export function AppointmentForm({ initial, defaultDate, onSuccess, onCancel }: A
     <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
       {serverError && <ErrorAlert message={serverError} />}
 
-      <Field label="Paciente" htmlFor="patientId" required error={errors.patientId?.message}>
-        <Controller
-          control={control}
-          name="patientId"
-          render={() => (
-            <PatientCombobox
-              id="patientId"
-              value={watch("patientId")}
-              selectedName={watch("patientName")}
-              invalid={!!errors.patientId}
-              onChange={(pid, name) => {
-                setValue("patientId", pid, { shouldValidate: true });
-                setValue("patientName", name);
-              }}
+      {quickCreateQuery === null ? (
+        <Field label="Paciente" htmlFor="patientId" required error={errors.patientId?.message}>
+          {(aria) => (
+            <Controller
+              control={control}
+              name="patientId"
+              render={() => (
+                <PatientCombobox
+                  {...aria}
+                  id="patientId"
+                  value={watch("patientId")}
+                  selectedName={watch("patientName")}
+                  invalid={!!errors.patientId}
+                  onChange={(pid, name) => {
+                    setValue("patientId", pid, { shouldValidate: true });
+                    setValue("patientName", name);
+                  }}
+                  onCreateNew={setQuickCreateQuery}
+                />
+              )}
             />
           )}
+        </Field>
+      ) : (
+        <PatientQuickCreate
+          initialQuery={quickCreateQuery}
+          onCreated={(pid, name) => {
+            setValue("patientId", pid, { shouldValidate: true });
+            setValue("patientName", name);
+            setQuickCreateQuery(null);
+          }}
+          onCancel={() => setQuickCreateQuery(null)}
         />
-      </Field>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Fecha" htmlFor="date" required error={errors.date?.message} hint="dd/mm/aaaa">
-          <Controller
-            control={control}
-            name="date"
-            render={({ field }) => (
-              <DateInput
-                id="date"
-                value={field.value}
-                onChange={field.onChange}
-                onBlur={field.onBlur}
-                invalid={!!errors.date}
-              />
-            )}
-          />
+          {(aria) => (
+            <Controller
+              control={control}
+              name="date"
+              render={({ field }) => (
+                <DateInput
+                  {...aria}
+                  id="date"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  invalid={!!errors.date}
+                />
+              )}
+            />
+          )}
         </Field>
         <Field label="Hora" htmlFor="time" required error={errors.time?.message} hint="24h">
-          <Controller
-            control={control}
-            name="time"
-            render={({ field }) => (
-              <TimeInput
-                id="time"
-                value={field.value}
-                onChange={field.onChange}
-                onBlur={field.onBlur}
-                invalid={!!errors.time}
-              />
-            )}
-          />
+          {(aria) => (
+            <Controller
+              control={control}
+              name="time"
+              render={({ field }) => (
+                <TimeInput
+                  {...aria}
+                  id="time"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  invalid={!!errors.time}
+                />
+              )}
+            />
+          )}
         </Field>
         <Field label="Duración" htmlFor="durationMin" error={errors.durationMin?.message}>
           <Select id="durationMin" {...register("durationMin")}>
@@ -190,15 +216,19 @@ export function AppointmentForm({ initial, defaultDate, onSuccess, onCancel }: A
             ))}
           </Select>
         </Field>
-        <Field label="Estado" htmlFor="status" error={errors.status?.message}>
-          <Select id="status" {...register("status")}>
-            {APPOINTMENT_STATUS.map((s) => (
-              <option key={s} value={s}>
-                {APPOINTMENT_STATUS_LABELS[s]}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {/* El estado solo se edita en una cita existente: agendar algo como
+            "Atendida" o "Ausente" no tiene sentido clínico. */}
+        {isEdit && (
+          <Field label="Estado" htmlFor="status" error={errors.status?.message}>
+            <Select id="status" {...register("status")}>
+              {APPOINTMENT_STATUS.map((s) => (
+                <option key={s} value={s}>
+                  {APPOINTMENT_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </div>
 
       <Field label="Motivo" htmlFor="reason" error={errors.reason?.message}>

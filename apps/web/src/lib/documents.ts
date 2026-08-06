@@ -37,6 +37,8 @@ async function uploadDocument(patientId: string, formData: FormData): Promise<Do
 export function useUploadDocument(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (formData: FormData) => uploadDocument(patientId, formData),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", patientId] }),
   });
@@ -45,6 +47,8 @@ export function useUploadDocument(patientId: string) {
 export function useDeleteDocument(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (docId: string) => api.delete(`/patients/${patientId}/documents/${docId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", patientId] }),
   });

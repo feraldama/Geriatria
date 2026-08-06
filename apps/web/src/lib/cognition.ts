@@ -35,6 +35,8 @@ export function useLanguageAssessment(patientId: string, lid: string) {
 export function useApplyLanguage(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: ApplyLanguageInput) =>
       api.post<{ assessment: CognitionAssessmentItem }>(`/patients/${patientId}/language`, data),
     onSuccess: () => {

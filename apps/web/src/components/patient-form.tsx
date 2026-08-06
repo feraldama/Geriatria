@@ -33,6 +33,7 @@ import { CheckboxField } from "@/components/ui/checkbox";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { scrollToFirstError } from "@/lib/scroll-to-error";
+import { useUnsavedChanges, confirmDiscard } from "@/lib/use-unsaved-changes";
 
 // Valores del formulario: todo string/boolean; los selects opcionales usan "".
 // La validación/transformación final la hace Zod (mismo esquema que el backend).
@@ -193,13 +194,17 @@ export function PatientForm({
     register,
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty, isSubmitSuccessful },
   } = useForm<FormValues>({
     resolver: zodResolver(createPatientSchema) as unknown as Resolver<FormValues>,
     defaultValues: initial ? fromDetail(initial) : emptyValues(),
     mode: "onTouched", // validación al salir del campo (no en cada tecla)
     shouldFocusError: false, // el foco/scroll suave lo maneja scrollToFirstError
   });
+
+  // Ficha larga: avisamos antes de perder lo escrito.
+  const dirty = isDirty && !isSubmitSuccessful;
+  useUnsavedChanges(dirty);
 
   const caregivers = useFieldArray({ control, name: "caregivers" });
   const conditions = useFieldArray({ control, name: "conditions" });
@@ -661,7 +666,16 @@ export function PatientForm({
       </Card>
 
       <div className="sticky bottom-0 flex justify-end gap-3 border-t border-border bg-background/95 py-4 backdrop-blur">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            // Cancelar es la vía más habitual de abandonar la ficha: sin esto
+            // descartaba lo cargado sin preguntar nada.
+            if (!dirty || confirmDiscard()) onCancel();
+          }}
+          disabled={submitting}
+        >
           Cancelar
         </Button>
         <Button type="submit" loading={submitting}>

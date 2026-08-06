@@ -33,6 +33,8 @@ export function useScale(patientId: string, sid: string) {
 export function useApplyScale(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: ApplyScaleInput) =>
       api.post<{ scale: AssessmentScaleItem }>(`/patients/${patientId}/scales`, data),
     onSuccess: () => {

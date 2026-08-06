@@ -11,3 +11,9 @@ allowBuilds:
   esbuild: true
   prisma: true
   unrs-resolver: true
+
+# apps/web queda en ESLint 8 + .eslintrc legacy (el resto del monorepo usa
+# ESLint 9 flat config): @next/eslint-plugin-next 14.2.x llama a APIs que
+# ESLint 9 eliminó. Unificarlo requiere primero actualizar a Next 15.
+overrides:
+  eslint-plugin-react-hooks: 5.1.0

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Plus, Syringe, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { formatDate, PERMISSIONS, type VaccinationItem } from "@geriatria/schemas";
+import { ApiError } from "@/lib/api";
 import { useVaccinations, useDeleteVaccination } from "@/lib/extras";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { useToast } from "@/components/ui/toast";
@@ -31,9 +32,13 @@ export default function VacunacionPage() {
 
   async function onConfirmDelete() {
     if (!toDelete) return;
-    await del.mutateAsync(toDelete.id);
-    toast("Vacuna eliminada");
-    setToDelete(null);
+    try {
+      await del.mutateAsync(toDelete.id);
+      toast("Vacuna eliminada");
+      setToDelete(null);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "No se pudo eliminar la vacuna", "error");
+    }
   }
 
   return (

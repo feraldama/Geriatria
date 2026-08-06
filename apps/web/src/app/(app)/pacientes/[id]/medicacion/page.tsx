@@ -9,6 +9,7 @@ import {
   PERMISSIONS,
   type MedicationItem,
 } from "@geriatria/schemas";
+import { ApiError } from "@/lib/api";
 import {
   useMedications,
   useReactivateMedication,
@@ -61,14 +62,22 @@ export default function MedicacionPage() {
     setFormOpen(true);
   }
   async function onReactivate(m: MedicationItem) {
-    await reactivate.mutateAsync(m.id);
-    toast("Medicamento reactivado");
+    try {
+      await reactivate.mutateAsync(m.id);
+      toast("Medicamento reactivado");
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "No se pudo reactivar el medicamento", "error");
+    }
   }
   async function onConfirmDelete() {
     if (!deleteMed) return;
-    await del.mutateAsync(deleteMed.id);
-    toast("Medicamento eliminado");
-    setDeleteMed(null);
+    try {
+      await del.mutateAsync(deleteMed.id);
+      toast("Medicamento eliminado");
+      setDeleteMed(null);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "No se pudo eliminar el medicamento", "error");
+    }
   }
 
   return (

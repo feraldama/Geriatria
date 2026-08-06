@@ -12,7 +12,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { recordAudit } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
-import { uploadSingle, absolutePath, removeFile, relativePathFor } from "../lib/storage.js";
+import { uploadSingle, absolutePath, removeFile, relativePathFor, assertSafeId } from "../lib/storage.js";
 
 export const documentsRouter: Router = Router();
 documentsRouter.use(requireAuth);
@@ -24,6 +24,19 @@ async function ensurePatient(patientId: string): Promise<string> {
   });
   if (!p) throw notFound("Paciente no encontrado");
   return p.id;
+}
+
+// Valida formato + existencia del paciente ANTES de que multer escriba a disco.
+function ensurePatientParam(req: Request, _res: Response, next: NextFunction) {
+  Promise.resolve()
+    .then(() => {
+      assertSafeId(String(req.params.patientId));
+      return ensurePatient(String(req.params.patientId));
+    })
+    .then(() => next())
+    .catch((err: unknown) => {
+      next(err instanceof Error && err.message === "Identificador inválido" ? notFound("Paciente no encontrado") : err);
+    });
 }
 
 function serialize(d: {
@@ -80,17 +93,17 @@ documentsRouter.get(
 documentsRouter.post(
   "/:patientId/documents",
   requirePermission(PERMISSIONS.CLINICAL_WRITE),
+  ensurePatientParam,
   handleUpload,
   async (req, res, next) => {
+    const file = req.file;
     try {
-      const patientId = await ensurePatient(String(req.params.patientId));
-      const file = req.file;
+      const patientId = String(req.params.patientId);
       if (!file) throw badRequest("Adjuntá un archivo");
 
       // Validamos la metadata (campos de texto del multipart).
       const parsed = documentMetadataSchema.safeParse(req.body);
       if (!parsed.success) {
-        removeFile(relativePathFor(patientId, file.filename)); // limpiamos el archivo
         const error = badRequest("Datos inválidos");
         (error as { details?: unknown }).details = parsed.error.flatten().fieldErrors;
         throw error;
@@ -120,6 +133,9 @@ documentsRouter.post(
       });
       res.status(201).json({ document: serialize(created) });
     } catch (err) {
+      // Nunca dejamos archivos huérfanos: si algo falló después de escribir
+      // el archivo a disco, lo eliminamos.
+      if (file) removeFile(relativePathFor(String(req.params.patientId), file.filename));
       next(err);
     }
   },
@@ -144,6 +160,10 @@ documentsRouter.get(
       const encoded = encodeURIComponent(doc.fileName);
       res.setHeader("Content-Type", doc.mimeType);
       res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encoded}`);
+      // El navegador no debe reinterpretar el tipo, y el contenido (subido por
+      // usuarios) se sirve sin capacidad de ejecutar scripts ni navegar.
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self'; media-src 'self'");
       await recordAudit({
         userId: req.user!.id,
         action: "document.view",
@@ -151,7 +171,9 @@ documentsRouter.get(
         resourceId: doc.id,
         req,
       });
-      fs.createReadStream(abs).pipe(res);
+      const stream = fs.createReadStream(abs);
+      stream.on("error", next);
+      stream.pipe(res);
     } catch (err) {
       next(err);
     }

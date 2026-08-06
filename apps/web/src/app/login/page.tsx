@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, type LoginInput } from "@geriatria/schemas";
@@ -16,7 +16,16 @@ import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/
 import { ErrorAlert } from "@/components/ui/alert";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const login = useLogin();
   const [showPassword, setShowPassword] = useState(false);
   const {
@@ -33,7 +42,11 @@ export default function LoginPage() {
   async function onSubmit(values: LoginInput) {
     try {
       await login.mutateAsync(values);
-      router.replace("/dashboard");
+      // Si llegamos acá por sesión expirada, volvemos a donde estaba el usuario.
+      // Solo rutas internas: un `next` externo sería un redirect abierto.
+      const next = searchParams.get("next");
+      const target = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+      router.replace(target);
     } catch {
       // El error se muestra abajo; reenfocamos el email para reintentar.
       setFocus("email");

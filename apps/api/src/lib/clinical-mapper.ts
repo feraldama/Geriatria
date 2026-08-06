@@ -2,23 +2,37 @@
 import type { Prisma } from "@prisma/client";
 import { sanitizePhysicalExam, type ConsultationItem, type VitalSignItem } from "@geriatria/schemas";
 
-export function serializeVital(v: {
-  id: string;
-  measuredAt: Date;
-  systolic: number | null;
-  diastolic: number | null;
-  heartRate: number | null;
-  respiratoryRate: number | null;
-  temperature: number | null;
-  oxygenSat: number | null;
-  weight: number | null;
-  height: number | null;
-  bmi: number | null;
-  calfCircumference: number | null;
-  bloodGlucose: number | null;
-  gripStrength: number | null;
-  notes: string | null;
-}): VitalSignItem {
+/**
+ * Las medidas clínicas se guardan como Decimal (exactas en la base) y viajan
+ * como number en el JSON de la API, que es lo que consumen los gráficos.
+ */
+type DecimalLike = { toNumber(): number };
+
+function toNumber(value: DecimalLike | number | null): number | null {
+  if (value === null) return null;
+  return typeof value === "number" ? value : value.toNumber();
+}
+
+type VitalRow = Pick<
+  Prisma.VitalSignGetPayload<Record<string, never>>,
+  | "id"
+  | "measuredAt"
+  | "systolic"
+  | "diastolic"
+  | "heartRate"
+  | "respiratoryRate"
+  | "temperature"
+  | "oxygenSat"
+  | "weight"
+  | "height"
+  | "bmi"
+  | "calfCircumference"
+  | "bloodGlucose"
+  | "gripStrength"
+  | "notes"
+>;
+
+export function serializeVital(v: VitalRow): VitalSignItem {
   return {
     id: v.id,
     measuredAt: v.measuredAt.toISOString(),
@@ -26,14 +40,14 @@ export function serializeVital(v: {
     diastolic: v.diastolic,
     heartRate: v.heartRate,
     respiratoryRate: v.respiratoryRate,
-    temperature: v.temperature,
+    temperature: toNumber(v.temperature),
     oxygenSat: v.oxygenSat,
-    weight: v.weight,
-    height: v.height,
-    bmi: v.bmi,
-    calfCircumference: v.calfCircumference,
+    weight: toNumber(v.weight),
+    height: toNumber(v.height),
+    bmi: toNumber(v.bmi),
+    calfCircumference: toNumber(v.calfCircumference),
     bloodGlucose: v.bloodGlucose,
-    gripStrength: v.gripStrength,
+    gripStrength: toNumber(v.gripStrength),
     notes: v.notes,
   };
 }

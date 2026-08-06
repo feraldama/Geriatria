@@ -17,7 +17,11 @@ export function middleware(req: NextRequest) {
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
-  if (hasSession && isLogin) {
+  // Con `?next=` el usuario viene de una sesión expirada: la cookie puede
+  // seguir presente (es httpOnly y el token ya no sirve). Rebotarlo al
+  // dashboard lo dejaría encerrado en pantallas que no cargan.
+  const vieneDeSesionExpirada = req.nextUrl.searchParams.has("next");
+  if (hasSession && isLogin && !vieneDeSesionExpirada) {
     const url = req.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);

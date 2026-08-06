@@ -3,7 +3,7 @@
  * línea de tiempo. Montadas bajo /patients. Requieren permisos clínicos.
  */
 import { Router } from "express";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
   consultationSchema,
   updateConsultationSchema,
@@ -12,6 +12,7 @@ import {
   updateMedicationSchema,
   suspendMedicationSchema,
   combineDateTime,
+  formatDate,
   formatTime,
   calculateBMI,
   parseDate,
@@ -51,12 +52,26 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { validateBody } from "../middleware/validate.js";
-import { recordAudit } from "../lib/audit.js";
+import { auditClinicalRead } from "../middleware/audit-read.js";
+import { recordAudit, diffFields } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { serializeConsultation, serializeVital } from "../lib/clinical-mapper.js";
+import { parsePagination } from "../lib/pagination.js";
 
 export const clinicalRouter: Router = Router();
 clinicalRouter.use(requireAuth);
+// Toda lectura de datos clínicos queda registrada (agrupada por ventana).
+// Se engancha a :patientId para que corra una sola vez por petición, con el
+// parámetro ya resuelto.
+clinicalRouter.param("patientId", auditClinicalRead);
+
+// Tamaño de página cuando el cliente pide paginación explícita
+// (?page=/?pageSize=). Sin esos parámetros no se trunca: ver lib/pagination.ts.
+const CLINICAL_PAGE_SIZE = 50;
+
+// La línea de tiempo mezcla cinco fuentes y las ordena en memoria; se toman
+// solo los eventos más recientes de cada una.
+const TIMELINE_PER_SOURCE = 100;
 
 // Verifica que el paciente exista y esté activo; devuelve su id.
 async function ensurePatient(patientId: string): Promise<string> {
@@ -125,12 +140,18 @@ clinicalRouter.get(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
-      const consultations = await prisma.consultation.findMany({
-        where: { patientId, deletedAt: null },
-        include: { vitalSigns: true },
-        orderBy: { date: "desc" },
-      });
-      res.json({ data: consultations.map(serializeConsultation) });
+      const { skip, take } = parsePagination(req, CLINICAL_PAGE_SIZE);
+      const [total, consultations] = await Promise.all([
+        prisma.consultation.count({ where: { patientId, deletedAt: null } }),
+        prisma.consultation.findMany({
+          where: { patientId, deletedAt: null },
+          include: { vitalSigns: { where: { deletedAt: null } } },
+          orderBy: { date: "desc" },
+          skip,
+          take,
+        }),
+      ]);
+      res.json({ data: consultations.map(serializeConsultation), total });
     } catch (err) {
       next(err);
     }
@@ -145,7 +166,7 @@ clinicalRouter.get(
       const patientId = await ensurePatient(String(req.params.patientId));
       const consultation = await prisma.consultation.findFirst({
         where: { id: String(req.params.cid), patientId, deletedAt: null },
-        include: { vitalSigns: true },
+        include: { vitalSigns: { where: { deletedAt: null } } },
       });
       if (!consultation) throw notFound("Consulta no encontrada");
       res.json({ consultation: serializeConsultation(consultation) });
@@ -206,7 +227,7 @@ clinicalRouter.post(
         }
         return tx.consultation.findUniqueOrThrow({
           where: { id: created.id },
-          include: { vitalSigns: true },
+          include: { vitalSigns: { where: { deletedAt: null } } },
         });
       });
 
@@ -234,30 +255,69 @@ clinicalRouter.patch(
       const cid = String(req.params.cid);
       const existing = await prisma.consultation.findFirst({
         where: { id: cid, patientId, deletedAt: null },
-        select: { id: true },
       });
       if (!existing) throw notFound("Consulta no encontrada");
 
       const { date, time, subjective, objective, assessment, plan, physicalExam } = req.body;
       const data: Prisma.ConsultationUpdateInput = {};
-      if (date !== undefined) data.date = toDateTime(date, time);
+      // Cambiar solo la hora también es un cambio: si no se envía fecha, se
+      // reutiliza la que ya tiene la consulta.
+      if (date !== undefined || time !== undefined) {
+        data.date = toDateTime(date ?? formatDate(existing.date), time);
+      }
       if (subjective !== undefined) data.subjective = subjective;
       if (objective !== undefined) data.objective = objective;
       if (assessment !== undefined) data.assessment = assessment;
       if (plan !== undefined) data.plan = plan;
       if (physicalExam !== undefined) data.physicalExam = sanitizePhysicalExam(physicalExam);
 
-      const updated = await prisma.consultation.update({
-        where: { id: cid },
-        data,
-        include: { vitalSigns: true },
+      // La historia clínica no se sobrescribe: antes de editar se archiva el
+      // estado anterior como una revisión inmutable.
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.consultationRevision.create({
+          data: {
+            consultationId: cid,
+            date: existing.date,
+            subjective: existing.subjective,
+            objective: existing.objective,
+            assessment: existing.assessment,
+            plan: existing.plan,
+            physicalExam: existing.physicalExam ?? Prisma.DbNull,
+            editedById: req.user!.id,
+          },
+        });
+        return tx.consultation.update({
+          where: { id: cid },
+          data,
+          include: { vitalSigns: { where: { deletedAt: null } } },
+        });
       });
+
       await recordAudit({
         userId: req.user!.id,
         action: "consultation.update",
         resource: "consultation",
         resourceId: cid,
         req,
+        metadata:
+          diffFields(
+            {
+              date: existing.date.toISOString(),
+              subjective: existing.subjective,
+              objective: existing.objective,
+              assessment: existing.assessment,
+              plan: existing.plan,
+              physicalExam: existing.physicalExam,
+            },
+            {
+              date: updated.date.toISOString(),
+              subjective: updated.subjective,
+              objective: updated.objective,
+              assessment: updated.assessment,
+              plan: updated.plan,
+              physicalExam: updated.physicalExam,
+            },
+          ) ?? undefined,
       });
       res.json({ consultation: serializeConsultation(updated) });
     } catch (err) {
@@ -291,11 +351,13 @@ clinicalRouter.get(
       ]);
       const field = allowed.has(String(req.query.sortBy)) ? String(req.query.sortBy) : "measuredAt";
 
-      const vitals = await prisma.vitalSign.findMany({
-        where: { patientId },
-        orderBy: { [field]: dir },
-      });
-      res.json({ data: vitals.map(serializeVital) });
+      const { skip, take } = parsePagination(req, CLINICAL_PAGE_SIZE);
+      const where = { patientId, deletedAt: null };
+      const [total, vitals] = await Promise.all([
+        prisma.vitalSign.count({ where }),
+        prisma.vitalSign.findMany({ skip, take, where, orderBy: { [field]: dir } }),
+      ]);
+      res.json({ data: vitals.map(serializeVital), total });
     } catch (err) {
       next(err);
     }
@@ -340,22 +402,27 @@ clinicalRouter.get(
         prisma.consultation.findMany({
           where: { patientId, deletedAt: null },
           orderBy: { date: "desc" },
+          take: TIMELINE_PER_SOURCE,
         }),
         prisma.appointment.findMany({
           where: { patientId, deletedAt: null },
           orderBy: { scheduledAt: "desc" },
+          take: TIMELINE_PER_SOURCE,
         }),
         prisma.assessmentScale.findMany({
           where: { patientId, deletedAt: null },
           orderBy: { appliedAt: "desc" },
+          take: TIMELINE_PER_SOURCE,
         }),
         prisma.syndromeAssessment.findMany({
           where: { patientId, deletedAt: null },
           orderBy: { assessedAt: "desc" },
+          take: TIMELINE_PER_SOURCE,
         }),
         prisma.languageAssessment.findMany({
           where: { patientId, deletedAt: null },
           orderBy: { assessedAt: "desc" },
+          take: TIMELINE_PER_SOURCE,
         }),
       ]);
 
@@ -454,12 +521,19 @@ clinicalRouter.get(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
-      const meds = await prisma.medication.findMany({
-        where: { patientId, deletedAt: null },
-        // Activas primero; dentro de cada grupo, por fármaco.
-        orderBy: [{ status: "asc" }, { drug: "asc" }],
-      });
-      res.json({ data: meds.map(serializeMedication) });
+      const { skip, take } = parsePagination(req, CLINICAL_PAGE_SIZE);
+      const where = { patientId, deletedAt: null };
+      const [total, meds] = await Promise.all([
+        prisma.medication.count({ where }),
+        prisma.medication.findMany({
+          skip,
+          take,
+          where,
+          // Activas primero; dentro de cada grupo, por fármaco.
+          orderBy: [{ status: "asc" }, { drug: "asc" }],
+        }),
+      ]);
+      res.json({ data: meds.map(serializeMedication), total });
     } catch (err) {
       next(err);
     }
@@ -503,12 +577,41 @@ clinicalRouter.post(
 );
 
 // Verifica que el medicamento exista y pertenezca al paciente.
-async function ensureMedication(patientId: string, mid: string): Promise<void> {
+async function ensureMedication(patientId: string, mid: string) {
   const m = await prisma.medication.findFirst({
     where: { id: mid, patientId, deletedAt: null },
-    select: { id: true },
   });
   if (!m) throw notFound("Medicamento no encontrado");
+  return m;
+}
+
+/** Campos de un medicamento que interesan en la traza de auditoría. */
+function medicationSnapshot(m: {
+  drug: string;
+  dose: string | null;
+  frequency: string | null;
+  route: string | null;
+  startDate: Date | null;
+  prescribedBy: string | null;
+  status: string;
+  suspendedAt: Date | null;
+  suspendedReason: string | null;
+  alertNote: string | null;
+  notes: string | null;
+}): Record<string, unknown> {
+  return {
+    drug: m.drug,
+    dose: m.dose,
+    frequency: m.frequency,
+    route: m.route,
+    startDate: m.startDate?.toISOString() ?? null,
+    prescribedBy: m.prescribedBy,
+    status: m.status,
+    suspendedAt: m.suspendedAt?.toISOString() ?? null,
+    suspendedReason: m.suspendedReason,
+    alertNote: m.alertNote,
+    notes: m.notes,
+  };
 }
 
 clinicalRouter.patch(
@@ -519,7 +622,7 @@ clinicalRouter.patch(
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
       const mid = String(req.params.mid);
-      await ensureMedication(patientId, mid);
+      const before = await ensureMedication(patientId, mid);
 
       const b = req.body;
       const updated = await prisma.medication.update({
@@ -541,6 +644,8 @@ clinicalRouter.patch(
         resource: "medication",
         resourceId: mid,
         req,
+        metadata:
+          diffFields(medicationSnapshot(before), medicationSnapshot(updated)) ?? undefined,
       });
       res.json({ medication: serializeMedication(updated) });
     } catch (err) {
@@ -557,7 +662,7 @@ clinicalRouter.post(
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
       const mid = String(req.params.mid);
-      await ensureMedication(patientId, mid);
+      const before = await ensureMedication(patientId, mid);
 
       const { suspendedReason, suspendedDate } = req.body;
       const updated = await prisma.medication.update({
@@ -574,6 +679,8 @@ clinicalRouter.post(
         resource: "medication",
         resourceId: mid,
         req,
+        metadata:
+          diffFields(medicationSnapshot(before), medicationSnapshot(updated)) ?? undefined,
       });
       res.json({ medication: serializeMedication(updated) });
     } catch (err) {
@@ -663,11 +770,13 @@ clinicalRouter.get(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
-      const scales = await prisma.assessmentScale.findMany({
-        where: { patientId, deletedAt: null },
-        orderBy: { appliedAt: "desc" },
-      });
-      res.json({ data: scales.map((s) => serializeScale(s)) });
+      const { skip, take } = parsePagination(req, CLINICAL_PAGE_SIZE);
+      const where = { patientId, deletedAt: null };
+      const [total, scales] = await Promise.all([
+        prisma.assessmentScale.count({ where }),
+        prisma.assessmentScale.findMany({ skip, take, where, orderBy: { appliedAt: "desc" } }),
+      ]);
+      res.json({ data: scales.map((s) => serializeScale(s)), total });
     } catch (err) {
       next(err);
     }
@@ -782,11 +891,13 @@ clinicalRouter.get(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
-      const items = await prisma.syndromeAssessment.findMany({
-        where: { patientId, deletedAt: null },
-        orderBy: { assessedAt: "desc" },
-      });
-      res.json({ data: items.map(serializeSyndrome) });
+      const { skip, take } = parsePagination(req, CLINICAL_PAGE_SIZE);
+      const where = { patientId, deletedAt: null };
+      const [total, items] = await Promise.all([
+        prisma.syndromeAssessment.count({ where }),
+        prisma.syndromeAssessment.findMany({ skip, take, where, orderBy: { assessedAt: "desc" } }),
+      ]);
+      res.json({ data: items.map(serializeSyndrome), total });
     } catch (err) {
       next(err);
     }
@@ -903,11 +1014,13 @@ clinicalRouter.get(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
-      const items = await prisma.languageAssessment.findMany({
-        where: { patientId, deletedAt: null },
-        orderBy: { assessedAt: "desc" },
-      });
-      res.json({ data: items.map(serializeLanguage) });
+      const { skip, take } = parsePagination(req, CLINICAL_PAGE_SIZE);
+      const where = { patientId, deletedAt: null };
+      const [total, items] = await Promise.all([
+        prisma.languageAssessment.count({ where }),
+        prisma.languageAssessment.findMany({ skip, take, where, orderBy: { assessedAt: "desc" } }),
+      ]);
+      res.json({ data: items.map(serializeLanguage), total });
     } catch (err) {
       next(err);
     }
@@ -1014,11 +1127,18 @@ clinicalRouter.get(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
-      const vaccinations = await prisma.vaccination.findMany({
-        where: { patientId, deletedAt: null },
-        orderBy: [{ doseDate: "desc" }, { createdAt: "desc" }],
-      });
-      res.json({ data: vaccinations.map(serializeVaccination) });
+      const { skip, take } = parsePagination(req, CLINICAL_PAGE_SIZE);
+      const where = { patientId, deletedAt: null };
+      const [total, vaccinations] = await Promise.all([
+        prisma.vaccination.count({ where }),
+        prisma.vaccination.findMany({
+          skip,
+          take,
+          where,
+          orderBy: [{ doseDate: "desc" }, { createdAt: "desc" }],
+        }),
+      ]);
+      res.json({ data: vaccinations.map(serializeVaccination), total });
     } catch (err) {
       next(err);
     }
@@ -1122,7 +1242,7 @@ clinicalRouter.get(
   async (req, res, next) => {
     try {
       const patientId = await ensurePatient(String(req.params.patientId));
-      const plan = await prisma.carePlan.findUnique({ where: { patientId } });
+      const plan = await prisma.carePlan.findFirst({ where: { patientId, deletedAt: null } });
       res.json({ carePlan: serializeCarePlan(plan) });
     } catch (err) {
       next(err);

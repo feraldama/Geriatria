@@ -26,6 +26,8 @@ function invalidate(qc: ReturnType<typeof useQueryClient>, patientId: string) {
 export function useCreateMedication(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: CreateMedicationInput) =>
       api.post<{ medication: MedicationItem }>(`/patients/${patientId}/medications`, data),
     onSuccess: () => invalidate(qc, patientId),
@@ -35,6 +37,8 @@ export function useCreateMedication(patientId: string) {
 export function useUpdateMedication(patientId: string, mid: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: UpdateMedicationInput) =>
       api.patch<{ medication: MedicationItem }>(`/patients/${patientId}/medications/${mid}`, data),
     onSuccess: () => invalidate(qc, patientId),
@@ -44,6 +48,8 @@ export function useUpdateMedication(patientId: string, mid: string) {
 export function useSuspendMedication(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: ({ mid, data }: { mid: string; data: SuspendMedicationInput }) =>
       api.post<{ medication: MedicationItem }>(
         `/patients/${patientId}/medications/${mid}/suspend`,
@@ -56,6 +62,8 @@ export function useSuspendMedication(patientId: string) {
 export function useReactivateMedication(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (mid: string) =>
       api.post<{ medication: MedicationItem }>(
         `/patients/${patientId}/medications/${mid}/reactivate`,
@@ -67,6 +75,8 @@ export function useReactivateMedication(patientId: string) {
 export function useDeleteMedication(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (mid: string) => api.delete(`/patients/${patientId}/medications/${mid}`),
     onSuccess: () => invalidate(qc, patientId),
   });

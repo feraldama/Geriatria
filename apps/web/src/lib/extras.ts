@@ -31,6 +31,8 @@ function invalidate(qc: ReturnType<typeof useQueryClient>, patientId: string) {
 export function useCreateVaccination(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: VaccinationInput) =>
       api.post<{ vaccination: VaccinationItem }>(`/patients/${patientId}/vaccinations`, data),
     onSuccess: () => invalidate(qc, patientId),
@@ -40,6 +42,8 @@ export function useCreateVaccination(patientId: string) {
 export function useUpdateVaccination(patientId: string, vid: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: UpdateVaccinationInput) =>
       api.patch<{ vaccination: VaccinationItem }>(`/patients/${patientId}/vaccinations/${vid}`, data),
     onSuccess: () => invalidate(qc, patientId),
@@ -49,6 +53,8 @@ export function useUpdateVaccination(patientId: string, vid: string) {
 export function useDeleteVaccination(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (vid: string) => api.delete(`/patients/${patientId}/vaccinations/${vid}`),
     onSuccess: () => invalidate(qc, patientId),
   });
@@ -68,6 +74,8 @@ export function useCarePlan(patientId: string) {
 export function useSaveCarePlan(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
+      // El formulario/llamador ya muestra el error; sin esto se vería dos veces.
+      meta: { errorHandledByCaller: true },
     mutationFn: (data: CarePlanInput) =>
       api.put<{ carePlan: CarePlanItem }>(`/patients/${patientId}/care-plan`, data),
     onSuccess: () => {

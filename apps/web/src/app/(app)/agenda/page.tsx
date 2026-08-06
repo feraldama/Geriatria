@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  startOfDay,
-  endOfDay,
   startOfWeek,
   endOfWeek,
   startOfMonth,
@@ -23,6 +21,7 @@ import {
   type AppointmentItem,
   type AppointmentStatus,
 } from "@geriatria/schemas";
+import { ApiError } from "@/lib/api";
 import {
   useAppointments,
   useUpdateAppointmentStatus,
@@ -35,6 +34,7 @@ import { AppointmentForm } from "@/components/appointment-form";
 import { DayView } from "@/components/agenda/day-view";
 import { WeekView } from "@/components/agenda/week-view";
 import { MonthView } from "@/components/agenda/month-view";
+import { calendarDayStart, calendarDayEnd } from "@/lib/calendar";
 import { cn } from "@/lib/utils";
 
 type View = "dia" | "semana" | "mes";
@@ -42,15 +42,26 @@ type View = "dia" | "semana" | "mes";
 const WEEK_OPTS = { weekStartsOn: 1 } as const; // semana inicia el lunes
 
 export default function AgendaPage() {
+  // useSearchParams exige un límite de Suspense en el App Router.
+  return (
+    <Suspense>
+      <Agenda />
+    </Suspense>
+  );
+}
+
+function Agenda() {
   const router = useRouter();
   // Estado inicial desde la URL (?view=&date=YYYY-MM-DD), p. ej. al venir desde
-  // la línea de tiempo. Se lee una sola vez al montar (solo en el cliente).
+  // la línea de tiempo. Se lee con useSearchParams: leer window.location en el
+  // inicializador daba un valor en el servidor y otro en el cliente.
+  const searchParams = useSearchParams();
   const [view, setView] = useState<View>(() => {
-    const v = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("view") : null;
+    const v = searchParams.get("view");
     return v === "dia" || v === "semana" || v === "mes" ? v : "semana";
   });
   const [anchor, setAnchor] = useState<Date>(() => {
-    const d = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("date") : null;
+    const d = searchParams.get("date");
     if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
       const [y, m, day] = d.split("-").map(Number);
       return new Date(y!, m! - 1, day!);
@@ -68,17 +79,24 @@ export default function AgendaPage() {
   const [editing, setEditing] = useState<AppointmentItem | undefined>();
   const [presetDate, setPresetDate] = useState<string | undefined>();
 
-  // Rango [from, to) a consultar según la vista.
+  // Rango [from, to) a consultar según la vista. Los límites se calculan en la
+  // zona de la clínica: con los del navegador se perdían las citas de los
+  // bordes del rango cuando el equipo está en otro huso.
   const { from, to, days, weeks } = useMemo(() => {
     if (view === "dia") {
-      return { from: startOfDay(anchor), to: endOfDay(anchor), days: [anchor], weeks: [] };
+      return {
+        from: calendarDayStart(anchor),
+        to: calendarDayEnd(anchor),
+        days: [anchor],
+        weeks: [],
+      };
     }
     if (view === "semana") {
       const start = startOfWeek(anchor, WEEK_OPTS);
       const end = endOfWeek(anchor, WEEK_OPTS);
       return {
-        from: startOfDay(start),
-        to: endOfDay(end),
+        from: calendarDayStart(start),
+        to: calendarDayEnd(end),
         days: eachDayOfInterval({ start, end }),
         weeks: [],
       };
@@ -89,7 +107,12 @@ export default function AgendaPage() {
     const allDays = eachDayOfInterval({ start: gridStart, end: gridEnd });
     const wks: Date[][] = [];
     for (let i = 0; i < allDays.length; i += 7) wks.push(allDays.slice(i, i + 7));
-    return { from: startOfDay(gridStart), to: endOfDay(gridEnd), days: [], weeks: wks };
+    return {
+      from: calendarDayStart(gridStart),
+      to: calendarDayEnd(gridEnd),
+      days: [],
+      weeks: wks,
+    };
   }, [view, anchor]);
 
   const { data: appointments = [], isLoading } = useAppointments(
@@ -114,8 +137,12 @@ export default function AgendaPage() {
     setFormOpen(true);
   }
   async function onStatus(a: AppointmentItem, status: AppointmentStatus) {
-    await statusMutation.mutateAsync({ id: a.id, status });
-    toast("Estado actualizado");
+    try {
+      await statusMutation.mutateAsync({ id: a.id, status });
+      toast("Estado actualizado");
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "No se pudo cambiar el estado", "error");
+    }
   }
 
   const periodLabel =

@@ -20,7 +20,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-geriatria}
     ports:
       # Se expone en 5433 para no chocar con un Postgres local en 5432.
-      - "${POSTGRES_PORT:-5433}:5432"
+      # Solo en loopback: la base de desarrollo no debe quedar accesible desde
+      # la red con la contraseña por defecto.
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - geriatria_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -29,15 +31,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Panel de administración total de la base. No arranca por defecto: se
+  # levanta a pedido con `docker compose --profile tools up -d adminer`.
   adminer:
     image: adminer:latest
     container_name: geriatria-adminer
+    profiles: ["tools"]
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "${ADMINER_PORT:-8080}:8080"
+      # Solo loopback: nunca expuesto a la red.
+      - "127.0.0.1:${ADMINER_PORT:-8080}:8080"
 
 volumes:
   geriatria_pgdata:

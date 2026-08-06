@@ -24,9 +24,10 @@ import { notFoundHandler, errorHandler } from "./middleware/error.js";
 export function createApp(): Express {
   const app = express();
 
-  // Detrás de un reverse proxy (lo gestiona el operador), confiamos en el
-  // primer salto para obtener bien la IP del cliente (rate limit / auditoría).
-  app.set("trust proxy", 1);
+  // Solo confiamos en X-Forwarded-For si hay un reverse proxy delante. Con
+  // trust proxy activo sin proxy real, cualquier cliente puede falsear su IP y
+  // saltarse el rate limit o envenenar el campo ipAddress de la auditoría.
+  app.set("trust proxy", env.TRUST_PROXY ? 1 : false);
 
   // Cabeceras de seguridad.
   app.use(helmet());
@@ -59,6 +60,16 @@ export function createApp(): Express {
     message: { error: { code: "TOO_MANY_REQUESTS", message: "Demasiados intentos" } },
   });
 
+  // Cambio y restablecimiento de contraseña: operaciones sensibles que no
+  // deberían poder repetirse cientos de veces dentro del límite general.
+  const passwordLimiter = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: { code: "TOO_MANY_REQUESTS", message: "Demasiados intentos" } },
+  });
+
   // Healthcheck sin prefijo de versión (para el operador / load balancer).
   app.use("/", healthRouter);
 
@@ -66,6 +77,8 @@ export function createApp(): Express {
   const api = express.Router();
   api.use(apiLimiter);
   api.use("/auth/login", loginLimiter);
+  api.use("/auth/password", passwordLimiter);
+  api.use(/^\/users\/[^/]+\/reset-password$/, passwordLimiter);
   api.use("/auth", authRouter);
   api.use("/profile", profileRouter);
   api.use("/patients", patientsRouter);

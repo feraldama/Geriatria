@@ -97,14 +97,18 @@ export function VaccinationForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Fecha de aplicación" htmlFor="vac-dose" hint="dd/mm/aaaa" error={errors.doseDate?.message}>
-          <Controller control={control} name="doseDate" render={({ field }) => (
-            <DateInput id="vac-dose" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.doseDate} />
-          )} />
+          {(aria) => (
+            <Controller control={control} name="doseDate" render={({ field }) => (
+              <DateInput id="vac-dose" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.doseDate} {...aria} />
+            )} />
+          )}
         </Field>
         <Field label="Próxima dosis" htmlFor="vac-next" hint="dd/mm/aaaa (opcional)" error={errors.nextDoseDate?.message}>
-          <Controller control={control} name="nextDoseDate" render={({ field }) => (
-            <DateInput id="vac-next" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.nextDoseDate} />
-          )} />
+          {(aria) => (
+            <Controller control={control} name="nextDoseDate" render={({ field }) => (
+              <DateInput id="vac-next" value={field.value} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.nextDoseDate} {...aria} />
+            )} />
+          )}
         </Field>
       </div>
 

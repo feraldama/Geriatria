@@ -16,12 +16,16 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertsCard } from "@/components/alerts-card";
+import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { data: user } = useCurrentUser();
   const { data, isLoading } = useTodayAppointments();
-  const hoy = formatDate(new Date()); // dd/mm/aaaa (helper central de fechas)
+  // La fecha se resuelve tras montar: esta página se prerenderiza en el build y
+  // un `new Date()` en el render dejaría congelada la fecha de compilación.
+  const now = useNow();
+  const hoy = now ? formatDate(now) : ""; // dd/mm/aaaa (helper central de fechas)
   const appointments = data?.appointments ?? [];
   const canClinical = hasPermission(user, PERMISSIONS.CLINICAL_READ);
 
@@ -31,7 +35,8 @@ export default function DashboardPage() {
         <h1 className="font-heading text-2xl font-semibold">
           Hola{user ? `, ${user.name}` : ""}
         </h1>
-        <p className="text-muted-foreground">Hoy es {hoy}</p>
+        {/* Vacío hasta montar, para no mostrar la fecha del build. */}
+        <p className="text-muted-foreground">{hoy ? `Hoy es ${hoy}` : " "}</p>
       </div>
 
       <Card>
