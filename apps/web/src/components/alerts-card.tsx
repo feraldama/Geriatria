@@ -6,6 +6,7 @@ import { formatDate, type AlertItem, type AlertKind } from "@geriatria/schemas";
 import { useAlerts } from "@/lib/extras";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonText } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<AlertKind, typeof Syringe> = {
@@ -38,7 +39,7 @@ export function AlertsCard() {
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="py-4 text-center text-muted-foreground">Cargando…</p>
+          <SkeletonText lines={3} className="py-2" />
         ) : !alerts || alerts.length === 0 ? (
           <div className="rounded-md border border-dashed border-border bg-muted/40 p-6 text-center text-muted-foreground">
             Sin alertas pendientes.

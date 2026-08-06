@@ -1,7 +1,7 @@
 "use client";
 
 /** Hooks de datos para Consultas, Signos vitales y Línea de tiempo. */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import type {
   ConsultationItem,
   ConsultationInput,
@@ -12,11 +12,26 @@ import type {
 } from "@geriatria/schemas";
 import { api } from "./api";
 
+/** Todas las consultas (hasta el techo del backend). La usa el resumen imprimible. */
 export function useConsultations(patientId: string) {
   return useQuery({
     queryKey: ["consultations", patientId],
     queryFn: () => api.get<{ data: ConsultationItem[] }>(`/patients/${patientId}/consultations`),
     select: (d) => d.data,
+    enabled: !!patientId,
+  });
+}
+
+/** Listado paginado de consultas. Página y orden los resuelve el backend. */
+export function useConsultationsPaged(patientId: string, page: number, pageSize = 20) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  return useQuery({
+    queryKey: ["consultations", patientId, page, pageSize],
+    queryFn: () =>
+      api.get<{ data: ConsultationItem[]; total: number }>(
+        `/patients/${patientId}/consultations?${params.toString()}`,
+      ),
+    placeholderData: keepPreviousData, // evita parpadeo al paginar
     enabled: !!patientId,
   });
 }
@@ -67,18 +82,26 @@ export function useUpdateConsultation(patientId: string, cid: string) {
   });
 }
 
-export function useVitals(patientId: string, sort?: { by: string; dir: "asc" | "desc" }) {
-  const params = new URLSearchParams();
-  if (sort) {
-    params.set("sortBy", sort.by);
-    params.set("sortDir", sort.dir);
-  }
-  const qs = params.toString();
+/** Signos vitales paginados. Búsqueda de página y ordenamiento en el backend. */
+export function useVitals(
+  patientId: string,
+  sort: { by: string; dir: "asc" | "desc" },
+  page: number,
+  pageSize = 20,
+) {
+  const params = new URLSearchParams({
+    sortBy: sort.by,
+    sortDir: sort.dir,
+    page: String(page),
+    pageSize: String(pageSize),
+  });
   return useQuery({
-    queryKey: ["vitals", patientId, sort],
+    queryKey: ["vitals", patientId, sort, page, pageSize],
     queryFn: () =>
-      api.get<{ data: VitalSignItem[] }>(`/patients/${patientId}/vitals${qs ? `?${qs}` : ""}`),
-    select: (d) => d.data,
+      api.get<{ data: VitalSignItem[]; total: number }>(
+        `/patients/${patientId}/vitals?${params.toString()}`,
+      ),
+    placeholderData: keepPreviousData, // evita parpadeo al paginar/ordenar
     enabled: !!patientId,
   });
 }

@@ -14,6 +14,7 @@ import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { PatientSubHeader } from "@/components/patient-subheader";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export default function LenguajePage() {
@@ -47,7 +48,7 @@ export default function LenguajePage() {
       {isError ? (
         <Card className="p-10 text-center text-destructive">No se pudieron cargar las evaluaciones.</Card>
       ) : isLoading ? (
-        <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+        <SkeletonCards count={3} />
       ) : !items || items.length === 0 ? (
         <Card className="p-10 text-center text-muted-foreground">
           Todavía no hay evaluaciones de lenguaje y cognición.

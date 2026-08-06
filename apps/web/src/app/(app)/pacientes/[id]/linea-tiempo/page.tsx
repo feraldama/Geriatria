@@ -8,6 +8,7 @@ import { useTimeline } from "@/lib/clinical";
 import { PatientSubHeader } from "@/components/patient-subheader";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonCards } from "@/components/ui/skeleton";
 
 export default function LineaTiempoPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,7 +24,7 @@ export default function LineaTiempoPage() {
           No se pudo cargar la línea de tiempo.
         </Card>
       ) : isLoading ? (
-        <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+        <SkeletonCards count={4} />
       ) : !events || events.length === 0 ? (
         <Card className="p-10 text-center text-muted-foreground">
           Todavía no hay eventos en la historia del paciente.

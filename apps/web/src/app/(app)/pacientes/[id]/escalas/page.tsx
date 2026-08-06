@@ -21,6 +21,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LineChart } from "@/components/ui/line-chart";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { LEVEL_BADGE } from "@/lib/scale-ui";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +54,7 @@ export default function EscalasPage() {
       {isError ? (
         <Card className="p-10 text-center text-destructive">No se pudieron cargar las escalas.</Card>
       ) : isLoading ? (
-        <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+        <SkeletonCards count={3} />
       ) : (
         <div className="flex flex-col gap-10">
           {SCALE_GROUPS.map((group) => (

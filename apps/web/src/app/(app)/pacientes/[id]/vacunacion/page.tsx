@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { VaccinationForm } from "@/components/vaccination-form";
 
 export default function VacunacionPage() {
@@ -58,7 +59,7 @@ export default function VacunacionPage() {
       {isError ? (
         <Card className="p-10 text-center text-destructive">No se pudo cargar la vacunación.</Card>
       ) : isLoading ? (
-        <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+        <SkeletonCards count={3} />
       ) : !vaccinations || vaccinations.length === 0 ? (
         <Card className="p-10 text-center text-muted-foreground">Sin vacunas registradas.</Card>
       ) : (

@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ui/field";
 import { DateInput } from "@/components/ui/date-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SkeletonText } from "@/components/ui/skeleton";
 import { scrollToFirstError } from "@/lib/scroll-to-error";
 
 interface FormValues {
@@ -73,7 +74,7 @@ export default function PlanCuidadosPage() {
     }
   }, () => scrollToFirstError());
 
-  if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (isLoading) return <SkeletonText lines={6} className="p-6" />;
 
   const empty =
     !plan?.objectives && !plan?.indications && !plan?.nextControls && !plan?.nextControlDate;

@@ -10,6 +10,8 @@ import { PatientSubHeader } from "@/components/patient-subheader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
+import { Paginator } from "@/components/ui/paginator";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import { VitalsForm } from "@/components/vitals-form";
 import { DataTable, type DataTableColumn, type SortDir } from "@/components/ui/data-table";
 
@@ -19,13 +21,19 @@ function pa(v: VitalSignItem) {
 
 const num = (value: number | null) => value ?? "—";
 
+const PAGE_SIZE = 20;
+
 export default function VitalesPage() {
   const { id } = useParams<{ id: string }>();
   const [sort, setSort] = useState<{ by: string; dir: SortDir }>({ by: "measuredAt", dir: "desc" });
-  const { data: vitals, isLoading, isError } = useVitals(id, sort);
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isError } = useVitals(id, sort, page, PAGE_SIZE);
+  const vitals = data?.data;
   const { data: user } = useCurrentUser();
   const canWrite = hasPermission(user, PERMISSIONS.CLINICAL_WRITE);
   const [open, setOpen] = useState(false);
+
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
 
   const columns: DataTableColumn<VitalSignItem>[] = [
     {
@@ -67,7 +75,9 @@ export default function VitalesPage() {
           No se pudieron cargar los signos vitales.
         </Card>
       ) : isLoading ? (
-        <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+        <Card className="overflow-hidden">
+          <SkeletonTable rows={8} cols={12} />
+        </Card>
       ) : !vitals || vitals.length === 0 ? (
         <Card className="p-10 text-center text-muted-foreground">
           Todavía no hay mediciones registradas.
@@ -80,10 +90,15 @@ export default function VitalesPage() {
             rowKey={(v) => v.id}
             sortBy={sort.by}
             sortDir={sort.dir}
-            onSort={(by, dir) => setSort({ by, dir })}
+            onSort={(by, dir) => {
+              setSort({ by, dir });
+              setPage(1);
+            }}
           />
         </Card>
       )}
+
+      <Paginator page={page} totalPages={totalPages} onPageChange={setPage} />
 
       <Dialog
         open={open}

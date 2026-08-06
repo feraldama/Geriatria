@@ -15,6 +15,7 @@ import { PatientSubHeader } from "@/components/patient-subheader";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export default function SindromesPage() {
@@ -51,7 +52,7 @@ export default function SindromesPage() {
       {isError ? (
         <Card className="p-10 text-center text-destructive">No se pudieron cargar los síndromes.</Card>
       ) : isLoading ? (
-        <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+        <SkeletonCards count={2} />
       ) : !latest ? (
         <Card className="p-10 text-center text-muted-foreground">
           Todavía no hay evaluaciones de síndromes geriátricos.

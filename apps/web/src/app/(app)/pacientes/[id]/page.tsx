@@ -25,6 +25,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PatientTabs } from "@/components/patient-tabs";
 import { cn } from "@/lib/utils";
 
@@ -51,7 +52,37 @@ export default function PacienteDetallePage() {
   const canDelete = hasPermission(user, PERMISSIONS.PATIENT_DELETE);
   const canClinical = hasPermission(user, PERMISSIONS.CLINICAL_READ);
 
-  if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (isLoading)
+    return (
+      <div
+        role="status"
+        aria-label="Cargando paciente"
+        className="mx-auto flex max-w-5xl flex-col gap-6"
+      >
+        <Skeleton className="h-4 w-36" />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-8 w-64 max-w-full" />
+            <Skeleton className="h-4 w-44" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-36" />
+            <Skeleton className="h-10 w-28" />
+          </div>
+        </div>
+        <Skeleton className="h-10 w-full" />
+        <div className="grid gap-6 md:grid-cols-2">
+          {[0, 1].map((i) => (
+            <Card key={i} className="flex flex-col gap-4 p-6">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
   if (isError || !patient)
     return <p className="p-6 text-destructive">No se pudo cargar el paciente.</p>;
 

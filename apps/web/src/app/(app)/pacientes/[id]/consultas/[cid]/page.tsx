@@ -14,6 +14,7 @@ import { useConsultation } from "@/lib/clinical";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SkeletonText } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 function SoapBlock({ label, value }: { label: string; value: string | null }) {
@@ -88,7 +89,7 @@ export default function ConsultaDetallePage() {
   const { data: user } = useCurrentUser();
   const canWrite = hasPermission(user, PERMISSIONS.CLINICAL_WRITE);
 
-  if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (isLoading) return <SkeletonText lines={6} className="p-6" />;
   if (isError || !c) return <p className="p-6 text-destructive">No se pudo cargar la consulta.</p>;
 
   return (

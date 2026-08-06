@@ -15,6 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn, type SortDir } from "@/components/ui/data-table";
+import { Paginator } from "@/components/ui/paginator";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import { UserForm } from "@/components/user-form";
 import { ResetPasswordForm } from "@/components/reset-password-form";
 
@@ -116,7 +118,7 @@ export default function UsuariosPage() {
         {isError ? (
           <p className="p-8 text-center text-destructive">No se pudieron cargar los usuarios.</p>
         ) : isLoading ? (
-          <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+          <SkeletonTable rows={8} cols={6} />
         ) : data && data.data.length === 0 ? (
           <p className="p-10 text-center text-muted-foreground">Sin usuarios para “{q}”.</p>
         ) : (
@@ -131,17 +133,7 @@ export default function UsuariosPage() {
         )}
       </Card>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Anterior
-          </Button>
-          <span className="text-sm text-muted-foreground">Página {page} de {totalPages}</span>
-          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-            Siguiente
-          </Button>
-        </div>
-      )}
+      <Paginator page={page} totalPages={totalPages} onPageChange={setPage} />
 
       <Dialog
         open={formOpen}

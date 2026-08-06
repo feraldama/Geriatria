@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { MedicationForm } from "@/components/medication-form";
 import { SuspendMedicationForm } from "@/components/suspend-medication-form";
 
@@ -118,7 +119,7 @@ export default function MedicacionPage() {
           No se pudo cargar la medicación.
         </Card>
       ) : isLoading ? (
-        <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+        <SkeletonCards count={4} />
       ) : (
         <>
           {/* Conciliación de medicación activa */}

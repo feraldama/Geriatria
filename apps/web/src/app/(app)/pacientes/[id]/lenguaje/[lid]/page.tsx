@@ -7,13 +7,14 @@ import { formatDate, NAMING_ITEM_COUNT, REPETITION_PHRASES } from "@geriatria/sc
 import { useLanguageAssessment } from "@/lib/cognition";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonText } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export default function LenguajeDetallePage() {
   const { id, lid } = useParams<{ id: string; lid: string }>();
   const { data: a, isLoading, isError } = useLanguageAssessment(id, lid);
 
-  if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (isLoading) return <SkeletonText lines={6} className="p-6" />;
   if (isError || !a) return <p className="p-6 text-destructive">No se pudo cargar la evaluación.</p>;
 
   return (

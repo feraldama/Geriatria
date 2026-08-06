@@ -15,6 +15,7 @@ import { STATUS_BADGE_VARIANT } from "@/lib/appointment-ui";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AlertsCard } from "@/components/alerts-card";
 import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
@@ -60,7 +61,19 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="py-6 text-center text-muted-foreground">Cargando…</p>
+            // Réplica de las filas reales de la agenda (hora + detalle).
+            <div role="status" aria-label="Cargando agenda" className="flex flex-col divide-y divide-border">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-4 py-3">
+                  <Skeleton className="h-6 w-14 shrink-0" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <Skeleton className="h-4 w-48 max-w-full" />
+                    <Skeleton className="h-3.5 w-32 max-w-full" />
+                  </div>
+                  <Skeleton className="h-6 w-24 shrink-0" />
+                </div>
+              ))}
+            </div>
           ) : appointments.length === 0 ? (
             <div className="rounded-md border border-dashed border-border bg-muted/40 p-8 text-center text-muted-foreground">
               No hay citas programadas para hoy.

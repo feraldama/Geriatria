@@ -5,12 +5,13 @@ import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { useConsultation } from "@/lib/clinical";
 import { ConsultationForm } from "@/components/consultation-form";
+import { SkeletonText } from "@/components/ui/skeleton";
 
 export default function EditarConsultaPage() {
   const { id, cid } = useParams<{ id: string; cid: string }>();
   const { data: consultation, isLoading, isError } = useConsultation(id, cid);
 
-  if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (isLoading) return <SkeletonText lines={6} className="p-6" />;
   if (isError || !consultation)
     return <p className="p-6 text-destructive">No se pudo cargar la consulta.</p>;
 

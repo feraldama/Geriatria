@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, UserPlus, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, UserPlus, AlertTriangle } from "lucide-react";
 import {
   calculateAge,
   SEX_LABELS,
@@ -13,10 +13,12 @@ import {
 import { usePatients } from "@/lib/patients";
 import { useDebounce } from "@/lib/use-debounce";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Paginator } from "@/components/ui/paginator";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import { DataTable, type DataTableColumn, type SortDir } from "@/components/ui/data-table";
 import { cn } from "@/lib/utils";
 
@@ -135,7 +137,7 @@ export default function PacientesPage() {
         {isError ? (
           <p className="p-8 text-center text-destructive">No se pudieron cargar los pacientes.</p>
         ) : isLoading ? (
-          <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+          <SkeletonTable rows={8} cols={7} />
         ) : data && data.data.length === 0 ? (
           <div className="p-10 text-center text-muted-foreground">
             {q ? (
@@ -166,31 +168,7 @@ export default function PacientesPage() {
         )}
       </Card>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            <ChevronLeft className="h-4 w-4" aria-hidden />
-            Anterior
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Página {page} de {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Siguiente
-            <ChevronRight className="h-4 w-4" aria-hidden />
-          </Button>
-        </div>
-      )}
+      <Paginator page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }

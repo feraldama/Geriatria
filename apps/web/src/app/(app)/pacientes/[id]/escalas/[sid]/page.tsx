@@ -8,6 +8,7 @@ import { useScale } from "@/lib/scales";
 import { usePatient } from "@/lib/patients";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonText } from "@/components/ui/skeleton";
 import { LEVEL_BADGE } from "@/lib/scale-ui";
 
 export default function EscalaDetallePage() {
@@ -21,7 +22,7 @@ export default function EscalaDetallePage() {
     educationYears: patient?.educationYears,
   };
 
-  if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (isLoading) return <SkeletonText lines={6} className="p-6" />;
   if (isError || !scale) return <p className="p-6 text-destructive">No se pudo cargar la escala.</p>;
 
   const def = getScaleDefinition(scale.type);

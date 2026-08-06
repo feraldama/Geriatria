@@ -21,6 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { DocumentUploadForm } from "@/components/document-upload-form";
 
 export default function DocumentosPage() {
@@ -65,7 +66,7 @@ export default function DocumentosPage() {
       {isError ? (
         <Card className="p-10 text-center text-destructive">No se pudieron cargar los documentos.</Card>
       ) : isLoading ? (
-        <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+        <SkeletonCards count={4} />
       ) : !docs || docs.length === 0 ? (
         <Card className="p-10 text-center text-muted-foreground">
           Todavía no hay documentos cargados.

@@ -7,13 +7,14 @@ import { formatDate, GERIATRIC_SYNDROMES, GDS_FAST_STAGES } from "@geriatria/sch
 import { useSyndrome } from "@/lib/syndromes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonText } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export default function SindromeDetallePage() {
   const { id, sid } = useParams<{ id: string; sid: string }>();
   const { data: assessment, isLoading, isError } = useSyndrome(id, sid);
 
-  if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (isLoading) return <SkeletonText lines={6} className="p-6" />;
   if (isError || !assessment)
     return <p className="p-6 text-destructive">No se pudo cargar la evaluación.</p>;
 

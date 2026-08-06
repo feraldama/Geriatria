@@ -7,6 +7,7 @@ import type { CreatePatientInput } from "@geriatria/schemas";
 import { usePatient, useUpdatePatient } from "@/lib/patients";
 import { ApiError } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
+import { SkeletonText } from "@/components/ui/skeleton";
 import { PatientForm } from "@/components/patient-form";
 
 export default function EditarPacientePage() {
@@ -30,7 +31,7 @@ export default function EditarPacientePage() {
   const serverError =
     update.error instanceof ApiError ? update.error.message : update.error ? "No se pudo guardar" : null;
 
-  if (isLoading) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (isLoading) return <SkeletonText lines={6} className="p-6" />;
   if (isError || !patient)
     return <p className="p-6 text-destructive">No se pudo cargar el paciente.</p>;
 

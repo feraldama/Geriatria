@@ -1,20 +1,28 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FileText, Plus, Activity } from "lucide-react";
 import { formatDateTime, PERMISSIONS } from "@geriatria/schemas";
-import { useConsultations } from "@/lib/clinical";
+import { useConsultationsPaged } from "@/lib/clinical";
 import { useCurrentUser, hasPermission } from "@/lib/auth";
 import { PatientSubHeader } from "@/components/patient-subheader";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Paginator } from "@/components/ui/paginator";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 20;
 
 export default function ConsultasPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: consultations, isLoading, isError } = useConsultations(id);
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isError } = useConsultationsPaged(id, page, PAGE_SIZE);
+  const consultations = data?.data;
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
   const { data: user } = useCurrentUser();
   const canWrite = hasPermission(user, PERMISSIONS.CLINICAL_WRITE);
 
@@ -37,7 +45,7 @@ export default function ConsultasPage() {
           No se pudieron cargar las consultas.
         </Card>
       ) : isLoading ? (
-        <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+        <SkeletonCards count={4} />
       ) : !consultations || consultations.length === 0 ? (
         <Card className="p-10 text-center text-muted-foreground">
           Todavía no hay consultas registradas.
@@ -71,6 +79,8 @@ export default function ConsultasPage() {
           ))}
         </div>
       )}
+
+      <Paginator page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }

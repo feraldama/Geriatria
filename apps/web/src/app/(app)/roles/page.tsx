@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { RoleForm } from "@/components/role-form";
 
 function permLabel(action: string): string {
@@ -35,7 +36,7 @@ export default function RolesPage() {
       {isError ? (
         <Card className="p-10 text-center text-destructive">No se pudieron cargar los roles.</Card>
       ) : isLoading ? (
-        <p className="p-8 text-center text-muted-foreground">Cargando…</p>
+        <SkeletonCards count={3} />
       ) : (
         <div className="flex flex-col gap-4">
           {roles?.map((role) => (
