@@ -7,9 +7,15 @@ import {
   getScaleDefinition,
   computeScaleScore,
   scaleMaxScore,
+  scaleSections,
+  sectionScore,
+  optionPoints,
+  questionMaxPoints,
   calculateBMI,
   calculateAge,
   SCALE_TYPES,
+  type ScaleAnswers,
+  type ScaleDefinition,
 } from "@geriatria/schemas";
 
 // Nota: en preguntas de tipo "options" la respuesta es el ÍNDICE de la opción
@@ -40,7 +46,7 @@ describe("computeScaleScore", () => {
 
   it("rechaza respuestas faltantes", () => {
     const def = getScaleDefinition("MMSE")!;
-    expect(() => computeScaleScore(def, { orientacion_temporal: 5 })).toThrow();
+    expect(() => computeScaleScore(def, { o_ano: 0 })).toThrow();
   });
 
   it("valida el rango de un campo numérico (TUG)", () => {
@@ -90,14 +96,168 @@ describe("CAM (algoritmo de delirium)", () => {
   });
 });
 
-describe("T@M (suma de subpruebas /50)", () => {
-  it("suma los puntos de las 5 subpruebas hasta 50", () => {
-    const def = getScaleDefinition("TAM")!;
-    expect(scaleMaxScore(def)).toBe(50);
-    const max = { orientacion: 5, semantica: 5, libre: 10, clave: 10, perceptiva: 20 };
-    expect(computeScaleScore(def, max)).toBe(50);
-    expect(def.interpret(50).level).toBe("good");
-    expect(def.interpret(30).level).toBe("bad");
+/** Respuestas que puntúan el máximo en cada ítem de una escala. */
+function perfectAnswers(def: ScaleDefinition): ScaleAnswers {
+  const answers: ScaleAnswers = {};
+  for (const q of def.questions) {
+    if (q.kind === "options") {
+      // El índice de la opción que más puntos da (en "Correcto/Incorrecto", 0).
+      let best = 0;
+      let bestPoints = -Infinity;
+      q.options.forEach((o, i) => {
+        const points = optionPoints(o);
+        if (points > bestPoints) {
+          bestPoints = points;
+          best = i;
+        }
+      });
+      answers[q.id] = best;
+    } else {
+      answers[q.id] = q.max;
+    }
+  }
+  return answers;
+}
+
+/** Máximo de cada bloque, en el orden de la definición. */
+function sectionMaxima(def: ScaleDefinition): Array<[string | null, number]> {
+  return scaleSections(def).map((s) => [s.section, s.max]);
+}
+
+// Transcripción verbatim de la lámina de la doctora (Rami et al., 2007).
+describe("T@M (43 ítems /50)", () => {
+  const def = () => getScaleDefinition("TAM")!;
+
+  it("tiene los 43 ítems de la lámina y suma 50 con todo correcto", () => {
+    expect(def().questions).toHaveLength(43);
+    expect(scaleMaxScore(def())).toBe(50);
+    expect(computeScaleScore(def(), perfectAnswers(def()))).toBe(50);
+    expect(def().interpret(50).level).toBe("good");
+    expect(def().interpret(30).level).toBe("bad");
+  });
+
+  it("reparte los puntos por subprueba como la lámina", () => {
+    expect(sectionMaxima(def())).toEqual([
+      ["Memoria inmediata", 10],
+      ["Memoria de orientación temporal", 5],
+      ["Memoria remota semántica", 15],
+      ["Memoria de evocación libre", 10],
+      ["Memoria de evocación con pistas", 10],
+    ]);
+  });
+
+  it("los ítems van numerados 1–43 en el orden de la lámina", () => {
+    expect(def().questions.map((q) => q.id)).toEqual(
+      Array.from({ length: 43 }, (_, i) => `q${i + 1}`),
+    );
+  });
+
+  it("un subtotal se calcula solo con los ítems de su bloque", () => {
+    const inmediata = scaleSections(def())[0]!;
+    // Las 5 palabras correctas, las 5 preguntas de las frases incorrectas.
+    const answers: ScaleAnswers = {
+      q1: 0,
+      q2: 0,
+      q3: 0,
+      q4: 0,
+      q5: 0,
+      q6: 1,
+      q7: 1,
+      q8: 1,
+      q9: 1,
+      q10: 1,
+    };
+    expect(sectionScore(inmediata, answers)).toBe(5);
+  });
+});
+
+// MMSE de la lámina (versión Clínic Barcelona): 30 puntos repartidos distinto
+// del MMSE clásico — orientación de 9 ítems y copia del dibujo de 2 puntos.
+describe("MMSE (versión de la lámina)", () => {
+  const def = () => getScaleDefinition("MMSE")!;
+
+  it("suma 30 con todo correcto", () => {
+    expect(scaleMaxScore(def())).toBe(30);
+    expect(computeScaleScore(def(), perfectAnswers(def()))).toBe(30);
+    expect(def().interpret(30).level).toBe("good");
+  });
+
+  it("reparte los puntos por sección como la lámina", () => {
+    expect(sectionMaxima(def())).toEqual([
+      ["Orientación", 9],
+      ["Fijación", 3],
+      ["Atención y cálculo", 5],
+      ["Memoria", 3],
+      ["Lenguaje", 10],
+    ]);
+  });
+
+  it("trae la lámina de estímulos (pentágonos y “CIERRE LOS OJOS”)", () => {
+    expect(def().stimulus?.src).toBe("/laminas/mmse-estimulos.jpg");
+  });
+});
+
+// Las escalas sin secciones se siguen viendo como una lista plana.
+describe("scaleSections", () => {
+  it("devuelve un único bloque sin título cuando la escala no tiene secciones", () => {
+    const def = getScaleDefinition("BARTHEL")!;
+    const sections = scaleSections(def);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]!.section).toBeNull();
+    expect(sections[0]!.max).toBe(100);
+  });
+});
+
+// Invariantes que valen para TODA escala: protegen el contenido clínico de las
+// definiciones (un reparto de puntos que no cierra es un error de transcripción).
+// Excepciones documentadas al cierre del puntaje:
+//  - CAM: no suma, aplica el algoritmo de delirium (maxScore 1).
+//  - TUG: el ítem es un tiempo en segundos, no puntos.
+const SIN_CIERRE_DE_PUNTAJE = ["CAM", "TUG"];
+describe("invariantes de las definiciones de escalas", () => {
+  const defs = SCALE_TYPES.map((t) => getScaleDefinition(t)!);
+
+  it("el máximo declarado coincide con la suma de los ítems, por sexo", () => {
+    const desfasadas = defs
+      .filter((def) => !SIN_CIERRE_DE_PUNTAJE.includes(def.type))
+      .flatMap((def) =>
+        (["FEMENINO", "MASCULINO"] as const)
+          .map((sex) => {
+            const suma = def.questions.reduce((n, q) => n + questionMaxPoints(q, sex), 0);
+            return { type: def.type, sex, suma, max: scaleMaxScore(def, sex) };
+          })
+          .filter((r) => r.suma !== r.max),
+      );
+    expect(desfasadas).toEqual([]);
+  });
+
+  it("no hay ids de pregunta repetidos dentro de una escala", () => {
+    const conDuplicados = defs
+      .map((def) => ({ type: def.type, ids: def.questions.map((q) => q.id) }))
+      .filter((r) => new Set(r.ids).size !== r.ids.length)
+      .map((r) => r.type);
+    expect(conDuplicados).toEqual([]);
+  });
+
+  it("el ancla de la lámina apunta a un ítem que existe", () => {
+    const rotas = defs
+      .filter((def) => def.stimulus?.beforeQuestion)
+      .filter((def) => !def.questions.some((q) => q.id === def.stimulus!.beforeQuestion))
+      .map((def) => def.type);
+    expect(rotas).toEqual([]);
+  });
+
+  it("las secciones son contiguas (no se repite un título en dos bloques)", () => {
+    const rotas = defs
+      .map((def) => ({
+        type: def.type,
+        secciones: scaleSections(def)
+          .map((s) => s.section)
+          .filter((s): s is string => s !== null),
+      }))
+      .filter((r) => new Set(r.secciones).size !== r.secciones.length)
+      .map((r) => r.type);
+    expect(rotas).toEqual([]);
   });
 });
 

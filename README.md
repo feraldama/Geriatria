@@ -170,6 +170,12 @@ pnpm format:check   # verifica formato sin escribir
 Estos mismos pasos corren en CI (`.github/workflows/ci.yml`) en cada push y
 pull request, junto con el build de las imágenes Docker.
 
+> `apps/api` y `apps/web` consumen `@geriatria/schemas` **compilado**
+> (`packages/schemas/dist`), no el código fuente. Por eso sus scripts `test` y
+> `typecheck` corren antes el build del paquete: si no, un cambio en
+> `packages/schemas/src` no se ve y se terminan depurando fallos fantasma
+> contra código viejo.
+
 ## Despliegue (producción)
 
 El sistema se sirve desde un servidor accesible por internet. **La

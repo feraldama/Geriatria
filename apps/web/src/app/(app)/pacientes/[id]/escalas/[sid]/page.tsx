@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { formatDate, getScaleDefinition, optionPoints } from "@geriatria/schemas";
+import {
+  formatDate,
+  getScaleDefinition,
+  optionPoints,
+  scaleSections,
+  sectionScore,
+} from "@geriatria/schemas";
 import { useScale } from "@/lib/scales";
 import { usePatient } from "@/lib/patients";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +49,21 @@ export default function EscalaDetallePage() {
     return { text: `${q.text}`, value };
   }
 
+  // Los registros viejos pueden tener respuestas con los ids de una versión
+  // anterior del cuestionario (p. ej. el MMSE y la T@M antes de transcribir las
+  // láminas): esas respuestas no se pueden mapear a los ítems actuales. El
+  // puntaje total sí sigue siendo válido, así que mostramos solo los bloques
+  // que tengan al menos una respuesta reconocible, y avisamos si no hay
+  // ninguna (en vez de dibujar secciones vacías con subtotales en 0).
+  const answeredSections = def
+    ? scaleSections(def, sex)
+        .map((sec) => ({
+          ...sec,
+          questions: sec.questions.filter((q) => scale.answers?.[q.id] !== undefined),
+        }))
+        .filter((sec) => sec.questions.length > 0)
+    : [];
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <Link
@@ -77,21 +98,43 @@ export default function EscalaDetallePage() {
           <CardHeader>
             <CardTitle>Respuestas</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ul className="flex flex-col divide-y divide-border">
-              {def.questions.map((q) => {
-                const a = answerLabel(q.id);
-                if (!a) return null;
-                return (
-                  <li key={q.id} className="flex items-center justify-between gap-3 py-2">
-                    <span>{a.text}</span>
+          <CardContent className="flex flex-col gap-5">
+            {answeredSections.length === 0 && (
+              <p className="text-muted-foreground">
+                Este registro se cargó con una versión anterior del cuestionario, así que no se
+                pueden mostrar las respuestas por ítem. El puntaje total sigue siendo válido.
+              </p>
+            )}
+            {answeredSections.map((sec) => (
+              <div key={sec.section ?? "sin-seccion"}>
+                {sec.section && (
+                  <div className="mb-1 flex items-baseline justify-between gap-3 border-b border-border pb-1">
+                    <h3 className="font-heading font-semibold">{sec.section}</h3>
                     {showItemPoints && (
-                      <span className="shrink-0 tabular-nums text-muted-foreground">{a.value}</span>
+                      <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                        {sectionScore(sec, scale.answers ?? {}, sex)} / {sec.max}
+                      </span>
                     )}
-                  </li>
-                );
-              })}
-            </ul>
+                  </div>
+                )}
+                <ul className="flex flex-col divide-y divide-border">
+                  {sec.questions.map((q) => {
+                    const a = answerLabel(q.id);
+                    if (!a) return null;
+                    return (
+                      <li key={q.id} className="flex items-center justify-between gap-3 py-2">
+                        <span>{a.text}</span>
+                        {showItemPoints && (
+                          <span className="shrink-0 tabular-nums text-muted-foreground">
+                            {a.value}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

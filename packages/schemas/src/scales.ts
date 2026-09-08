@@ -117,11 +117,45 @@ export function optionPoints(opt: ScaleOption, sex?: Sex): number {
   return typeof opt.value === "number" ? opt.value : opt.value[sexColumn(sex)];
 }
 
+/** Campos comunes a toda pregunta, sea cual sea su tipo. */
+interface ScaleQuestionBase {
+  id: string;
+  text: string;
+  /**
+   * Subgrupo dentro de la escala (p. ej. "Memoria inmediata" en la T@M). Las
+   * preguntas consecutivas con la misma sección se agrupan bajo un encabezado
+   * con su subtotal. Sin sección, la escala se muestra como lista plana.
+   */
+  section?: string;
+  /** Aclaración de administración, verbatim de la lámina cuando existe. */
+  help?: string;
+}
+
 // Pregunta con opciones (radio), rango (puntos por sección) o número (input).
 export type ScaleQuestion =
-  | { id: string; text: string; kind: "options"; options: ScaleOption[] }
-  | { id: string; text: string; kind: "range"; max: number; help?: string }
-  | { id: string; text: string; kind: "number"; min: number; max: number; step?: number; unit?: string; help?: string };
+  | (ScaleQuestionBase & { kind: "options"; options: ScaleOption[] })
+  | (ScaleQuestionBase & { kind: "range"; max: number })
+  | (ScaleQuestionBase & {
+      kind: "number";
+      min: number;
+      max: number;
+      step?: number;
+      unit?: string;
+    });
+
+/** Lámina que se le muestra al paciente mientras se administra la escala. */
+export interface ScaleStimulus {
+  /** Ruta servida desde apps/web/public. */
+  src: string;
+  alt: string;
+  caption?: string;
+  /**
+   * Id de la pregunta antes de la cual se muestra la lámina, para que aparezca
+   * en el momento en que se usa y no al principio del formulario. Si no está
+   * (o si el id no existe), se muestra arriba de todo.
+   */
+  beforeQuestion?: string;
+}
 
 export interface ScaleDefinition {
   type: ScaleType;
@@ -145,6 +179,11 @@ export interface ScaleDefinition {
    * sin perder datos ya cargados.
    */
   hidden?: boolean;
+  /**
+   * Lámina de estímulos a mostrar durante la administración (MMSE: pentágonos
+   * entrelazados + "CIERRE LOS OJOS").
+   */
+  stimulus?: ScaleStimulus;
   questions: ScaleQuestion[];
   /**
    * Puntaje NO aditivo (algoritmos como CAM, cuyo resultado depende del patrón
@@ -171,6 +210,11 @@ const SI_NO_SINO = [
 const PRESENTE_AUSENTE = [
   { label: "Presente", value: 1 },
   { label: "Ausente", value: 0 },
+];
+/** Ítem de acierto/error (1/0), como las columnas "0 1" de las láminas. */
+const CORRECTO_INCORRECTO = [
+  { label: "Correcto", value: 1 },
+  { label: "Incorrecto", value: 0 },
 ];
 
 // ─── Índice de Barthel (ABVD) ──────────────────────────────────────────────
@@ -350,26 +394,113 @@ const LAWTON: ScaleDefinition = {
 };
 
 // ─── Mini-Mental (MMSE) ────────────────────────────────────────────────────
+// Transcripción de la lámina de la doctora (Folstein et al. 1975, versión del
+// Hospital Clínic de Barcelona). Ojo: esta versión reparte los 30 puntos
+// distinto del MMSE clásico — la orientación son 9 ítems (no pregunta el día
+// del mes) y la copia del dibujo vale 2 puntos. El total sigue siendo 30, así
+// que los puntos de corte no cambian.
 const MMSE: ScaleDefinition = {
   type: "MMSE",
   name: "Mini-Mental (MMSE)",
   sphere: "Cognición",
   category: "Cribado cognitivo global",
-  description: "Examen cognitivo breve (0–30). Cargá los puntos por sección. Ajustar por escolaridad.",
+  description:
+    "Examen cognitivo breve (0–30), verbatim de la lámina (Folstein 1975, versión Clínic Barcelona). Ajustar por escolaridad: el sistema no aplica corrección automática.",
   maxScore: 30,
   betterWhenHigher: true,
+  stimulus: {
+    src: "/laminas/mmse-estimulos.jpg",
+    alt: "Lámina de estímulos del MMSE: pentágonos entrelazados y la orden “CIERRE LOS OJOS”",
+    caption: "Mostrale esta lámina para los ítems de lectura y de copia del dibujo.",
+    // Aparece recién en el ítem de lectura, que es donde empieza a usarse
+    // (lectura y, dos ítems después, la copia del dibujo).
+    beforeQuestion: "lectura",
+  },
   questions: [
-    { id: "orientacion_temporal", text: "Orientación temporal (año, estación, fecha, día, mes)", kind: "range", max: 5 },
-    { id: "orientacion_espacial", text: "Orientación espacial (país, región, ciudad, lugar, planta)", kind: "range", max: 5 },
-    { id: "fijacion", text: "Fijación / registro (3 palabras)", kind: "range", max: 3 },
-    { id: "atencion_calculo", text: "Atención y cálculo (restar 7 / deletrear MUNDO al revés)", kind: "range", max: 5 },
-    { id: "memoria", text: "Memoria diferida (recordar las 3 palabras)", kind: "range", max: 3 },
-    { id: "nominacion", text: "Nominación (reloj, lápiz)", kind: "range", max: 2 },
-    { id: "repeticion", text: "Repetición de una frase", kind: "range", max: 1 },
-    { id: "comprension", text: "Comprensión (orden de 3 etapas)", kind: "range", max: 3 },
-    { id: "lectura", text: "Lectura (“cierre los ojos”)", kind: "range", max: 1 },
-    { id: "escritura", text: "Escritura de una frase", kind: "range", max: 1 },
-    { id: "copia", text: "Copia del dibujo (pentágonos)", kind: "range", max: 1 },
+    // Orientación (9)
+    { id: "o_ano", section: "Orientación", text: "¿En qué año estamos?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "o_estacion", section: "Orientación", text: "¿En qué estación del año estamos?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "o_dia_semana", section: "Orientación", text: "¿Qué día de la semana es hoy?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "o_mes", section: "Orientación", text: "¿En qué mes del año estamos?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "o_pais", section: "Orientación", text: "¿En qué país estamos?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "o_provincia", section: "Orientación", text: "¿En qué provincia estamos?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "o_ciudad", section: "Orientación", text: "¿En qué ciudad estamos?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "o_donde", section: "Orientación", text: "¿Dónde estamos en este momento?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "o_piso", section: "Orientación", text: "¿En qué piso/planta estamos?", kind: "options", options: CORRECTO_INCORRECTO },
+    // Fijación (3)
+    {
+      id: "fijacion",
+      section: "Fijación",
+      text: "Nombrar tres objetos a intervalos de 1 segundo: bicicleta, cuchara, manzana.",
+      help: "1 punto por cada respuesta correcta. Repetir los objetos hasta que el paciente aprenda los tres.",
+      kind: "range",
+      max: 3,
+    },
+    // Atención y cálculo (5)
+    {
+      id: "atencion_calculo",
+      section: "Atención y cálculo",
+      text: "Restar de 100 de 7 en 7. Parar después de 5 respuestas (100 - 93 - 86 - 79 - 72 - 65).",
+      help: "1 punto por cada respuesta correcta.",
+      kind: "range",
+      max: 5,
+    },
+    // Memoria (3)
+    {
+      id: "memoria",
+      section: "Memoria",
+      text: "Preguntar los nombres de los tres objetos (bicicleta, cuchara, manzana).",
+      help: "1 punto por cada respuesta correcta.",
+      kind: "range",
+      max: 3,
+    },
+    // Lenguaje (10)
+    {
+      id: "nominacion",
+      section: "Lenguaje",
+      text: "Señalar un lápiz y un reloj. Hacer que el paciente los denomine.",
+      help: "1 punto por cada acierto.",
+      kind: "range",
+      max: 2,
+    },
+    {
+      id: "repeticion",
+      section: "Lenguaje",
+      text: "Hacer que el paciente repita: NI SI, NI NO, NI PERO.",
+      kind: "options",
+      options: CORRECTO_INCORRECTO,
+    },
+    {
+      id: "ordenes",
+      section: "Lenguaje",
+      text: "Hacer que el paciente siga tres órdenes: COJA ESTE PAPEL CON LA MANO DERECHA, DÓBLELO POR LA MITAD Y DÉJELO EN EL SUELO.",
+      help: "1 punto por cada sección de la orden hecha correctamente.",
+      kind: "range",
+      max: 3,
+    },
+    {
+      id: "lectura",
+      section: "Lenguaje",
+      text: "El paciente tiene que leer y hacer lo siguiente: CIERRE LOS OJOS.",
+      help: "Mostrale la lámina de estímulos.",
+      kind: "options",
+      options: CORRECTO_INCORRECTO,
+    },
+    {
+      id: "escritura",
+      section: "Lenguaje",
+      text: "Hacer que el paciente escriba una frase (sujeto, verbo y objeto).",
+      kind: "options",
+      options: CORRECTO_INCORRECTO,
+    },
+    {
+      id: "copia",
+      section: "Lenguaje",
+      text: "Hacer copiar el dibujo (pentágonos entrelazados).",
+      help: "1 punto por cada dibujo realizado.",
+      kind: "range",
+      max: 2,
+    },
   ],
   interpret: (s) => {
     if (s >= 27) return I("Normal", "good");
@@ -511,25 +642,161 @@ const CAM: ScaleDefinition = {
 };
 
 // ─── T@M (Test de Alteración de Memoria) ────────────────────────────────────
-// Test de cribado de memoria (0–50) con 5 subpruebas. Se cargan los puntos por
-// subprueba (la profesional administra el test con sus estímulos). Versión
-// estándar publicada; confirmar/ajustar estímulos y puntos de corte con ella.
+// Transcripción verbatim de la lámina de la doctora: Rami L, Molinuevo JL,
+// Bosch B, Sánchez-Valle R, Villar A (Int J Geriatr Psychiatry 2007; 22:294-7),
+// Unidad Memoria-Alzheimer, Hospital Clínic i Universitari de Barcelona.
+// 43 ítems en 5 subpruebas: inmediata 10 + orientación 5 + semántica 15 +
+// evocación libre 10 + evocación con pistas 10 = 50.
+// La lámina no trae puntos de corte: los de abajo están PENDIENTES de que la
+// doctora los confirme (ver descripción).
+// Uso permitido en la práctica clínica; no autorizado el uso comercial ni de
+// investigación del test (© Rami L B-5483-04).
+const TAM_INMEDIATA = "Memoria inmediata";
+const TAM_ORIENTACION = "Memoria de orientación temporal";
+const TAM_SEMANTICA = "Memoria remota semántica";
+const TAM_LIBRE = "Memoria de evocación libre";
+const TAM_PISTAS = "Memoria de evocación con pistas";
+// Encabezados de grupo de la lámina, como nota de contexto de sus ítems.
+const GATOS = "¿Se acuerda de la frase de los gatos?";
+const NINO = "¿Se acuerda de la frase del niño?";
 const TAM: ScaleDefinition = {
   type: "TAM",
   name: "Test de Alteración de Memoria (T@M)",
   sphere: "Cognición",
   category: "Memoria",
   description:
-    "Cribado de memoria (0–50). Cargá los puntos por subprueba. Ajustar por escolaridad; confirmar la versión/estímulos con la profesional.",
+    "Cribado de memoria: 43 ítems, 0–50 (Rami et al., 2007). Marcá el acierto de cada ítem tal como figura en la lámina. Puntos de corte a confirmar con la profesional.",
   maxScore: 50,
   betterWhenHigher: true,
   questions: [
-    { id: "orientacion", text: "Orientación temporal", kind: "range", max: 5 },
-    { id: "semantica", text: "Memoria semántica remota", kind: "range", max: 5 },
-    { id: "libre", text: "Recuerdo libre", kind: "range", max: 10 },
-    { id: "clave", text: "Recuerdo con clave (facilitado)", kind: "range", max: 10 },
-    { id: "perceptiva", text: "Memoria de codificación / perceptiva", kind: "range", max: 20 },
+    // ── Memoria inmediata (10) ──
+    {
+      id: "q1",
+      section: TAM_INMEDIATA,
+      text: "Le he dicho una fruta, ¿cuál era?",
+      help:
+        "Antes de empezar: “Intente memorizar estas palabras. Es importante que esté atento/a”. Repita: cereza (fruta), hacha (herramienta), elefante (animal), piano (instrumento musical), verde (color). Si un ítem es 0, repetir la palabra. Al terminar: “Después le pediré que recuerde estas palabras”.",
+      kind: "options",
+      options: CORRECTO_INCORRECTO,
+    },
+    { id: "q2", section: TAM_INMEDIATA, text: "Le he dicho una herramienta, ¿cuál era?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q3", section: TAM_INMEDIATA, text: "Le he dicho un animal, ¿cuál?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q4", section: TAM_INMEDIATA, text: "Le he dicho un instrumento musical, ¿cuál?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q5", section: TAM_INMEDIATA, text: "Le he dicho un color, ¿cuál?", kind: "options", options: CORRECTO_INCORRECTO },
+    {
+      id: "q6",
+      section: TAM_INMEDIATA,
+      text: "¿Cuántos gatos había?",
+      help:
+        "“Esté atenta/o a estas frases e intente memorizarlas” (máximo 2 intentos de repetición). Repita: “TREINTA GATOS GRISES SE COMIERON TODOS LOS QUESOS”. Si un ítem es 0, decirle la respuesta correcta.",
+      kind: "options",
+      options: CORRECTO_INCORRECTO,
+    },
+    { id: "q7", section: TAM_INMEDIATA, text: "¿De qué color eran?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q8", section: TAM_INMEDIATA, text: "¿Qué se comieron?", kind: "options", options: CORRECTO_INCORRECTO },
+    {
+      id: "q9",
+      section: TAM_INMEDIATA,
+      text: "¿Cómo se llamaba el niño?",
+      help:
+        "Repita (máximo 2 intentos): “UN NIÑO LLAMADO LUIS JUGABA CON SU BICICLETA”. Si un ítem es 0, decirle la respuesta correcta.",
+      kind: "options",
+      options: CORRECTO_INCORRECTO,
+    },
+    { id: "q10", section: TAM_INMEDIATA, text: "¿Con qué jugaba?", kind: "options", options: CORRECTO_INCORRECTO },
+    // ── Memoria de orientación temporal (5) ──
+    { id: "q11", section: TAM_ORIENTACION, text: "Día de la semana", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q12", section: TAM_ORIENTACION, text: "Mes", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q13", section: TAM_ORIENTACION, text: "Día del mes", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q14", section: TAM_ORIENTACION, text: "Año", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q15", section: TAM_ORIENTACION, text: "Estación", kind: "options", options: CORRECTO_INCORRECTO },
+    // ── Memoria remota semántica (15) ──
+    {
+      id: "q16",
+      section: TAM_SEMANTICA,
+      text: "¿Cuál es su fecha de nacimiento?",
+      help: "2 intentos por ítem; si hay error, repetir de nuevo la pregunta.",
+      kind: "options",
+      options: CORRECTO_INCORRECTO,
+    },
+    { id: "q17", section: TAM_SEMANTICA, text: "¿Cómo se llama el profesional que arregla coches?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q18", section: TAM_SEMANTICA, text: "¿Cómo se llamaba el anterior presidente de gobierno?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q19", section: TAM_SEMANTICA, text: "¿Cuál es el último día del año?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q20", section: TAM_SEMANTICA, text: "¿Cuántos días tiene un año que no sea bisiesto?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q21", section: TAM_SEMANTICA, text: "¿Cuántos gramos hay en un cuarto de kilo?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q22", section: TAM_SEMANTICA, text: "¿Cuál es el octavo mes del año?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q23", section: TAM_SEMANTICA, text: "¿Qué día se celebra la Navidad?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q24", section: TAM_SEMANTICA, text: "Si el reloj marca las 11 en punto, ¿en qué número se sitúa la aguja larga?", kind: "options", options: CORRECTO_INCORRECTO },
+    {
+      id: "q25",
+      section: TAM_SEMANTICA,
+      text: "¿Qué estación del año empieza en septiembre después del verano?",
+      help:
+        "Redacción original de la lámina (hemisferio norte). En Paraguay septiembre empieza la primavera después del invierno: confirmar con la profesional si adapta el enunciado.",
+      kind: "options",
+      options: CORRECTO_INCORRECTO,
+    },
+    { id: "q26", section: TAM_SEMANTICA, text: "¿Qué animal bíblico engañó a Eva con una manzana?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q27", section: TAM_SEMANTICA, text: "¿De qué fruta se obtiene el mosto?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q28", section: TAM_SEMANTICA, text: "¿A partir de qué fruto se obtiene el chocolate?", kind: "options", options: CORRECTO_INCORRECTO },
+    {
+      id: "q29",
+      section: TAM_SEMANTICA,
+      text: "¿Cuánto es el triple de 1?",
+      help: "Así figura en la lámina; confirmar con la profesional si su versión usa otra cifra.",
+      kind: "options",
+      options: CORRECTO_INCORRECTO,
+    },
+    { id: "q30", section: TAM_SEMANTICA, text: "¿Cuántas horas hay en dos días?", kind: "options", options: CORRECTO_INCORRECTO },
+    // ── Memoria de evocación libre (10) ──
+    {
+      id: "q31",
+      section: TAM_LIBRE,
+      text: "De las palabras que dije al principio, ¿cuáles podría recordar?",
+      help: "Esperar la respuesta un mínimo de 20 segundos. 1 punto por palabra evocada.",
+      kind: "range",
+      max: 5,
+    },
+    {
+      id: "q32",
+      section: TAM_LIBRE,
+      text: "¿Se acuerda de la frase de los gatos?",
+      help: "1 punto por idea: Treinta – grises – quesos.",
+      kind: "range",
+      max: 3,
+    },
+    {
+      id: "q33",
+      section: TAM_LIBRE,
+      text: "¿Se acuerda de la frase del niño?",
+      help: "1 punto por idea: Luis – bicicleta.",
+      kind: "range",
+      max: 2,
+    },
+    // ── Memoria de evocación con pistas (10) ──
+    {
+      id: "q34",
+      section: TAM_PISTAS,
+      text: "Le dije una fruta, ¿cuál era?",
+      help: "Puntuar 1 en las ideas ya evocadas de forma libre.",
+      kind: "options",
+      options: CORRECTO_INCORRECTO,
+    },
+    { id: "q35", section: TAM_PISTAS, text: "Le dije una herramienta, ¿cuál?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q36", section: TAM_PISTAS, text: "Le dije un animal, ¿cuál era?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q37", section: TAM_PISTAS, text: "Un instrumento musical, ¿cuál?", kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q38", section: TAM_PISTAS, text: "Le dije un color, ¿cuál?", kind: "options", options: CORRECTO_INCORRECTO },
+    // En la lámina, 39–41 y 42–43 van bajo el encabezado de su frase; se
+    // conserva el enunciado textual y el contexto va en la nota.
+    { id: "q39", section: TAM_PISTAS, text: "¿Cuántos gatos había?", help: GATOS, kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q40", section: TAM_PISTAS, text: "¿De qué color eran?", help: GATOS, kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q41", section: TAM_PISTAS, text: "¿Qué comían?", help: GATOS, kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q42", section: TAM_PISTAS, text: "¿Cómo se llamaba?", help: NINO, kind: "options", options: CORRECTO_INCORRECTO },
+    { id: "q43", section: TAM_PISTAS, text: "¿Con qué estaba jugando?", help: NINO, kind: "options", options: CORRECTO_INCORRECTO },
   ],
+  // PENDIENTE: cortes provisorios; la lámina no los incluye y la publicación
+  // original usa umbrales más bajos. Confirmar con la doctora antes de darles
+  // valor clínico (el puntaje /50 sí es fiel a la lámina).
   interpret: (s) => {
     if (s >= 48) return I("Normal", "good");
     if (s >= 38) return I("Posible deterioro de memoria (DCL amnésico)", "warning");
@@ -1060,6 +1327,75 @@ export function computeScaleScore(
 }
 
 /**
+ * Puntos de una respuesta concreta, con la semántica de `answers` (índice de
+ * opción en "options", puntos directos en "range"/"number"). Devuelve 0 si la
+ * respuesta falta o es inválida.
+ */
+export function questionPoints(q: ScaleQuestion, value: number | undefined, sex?: Sex): number {
+  if (value === undefined || value === null || Number.isNaN(Number(value))) return 0;
+  const n = Number(value);
+  if (q.kind === "options") {
+    const opt = Number.isInteger(n) ? q.options[n] : undefined;
+    return opt ? optionPoints(opt, sex) : 0;
+  }
+  return n;
+}
+
+/** Puntos máximos alcanzables en una pregunta. */
+export function questionMaxPoints(q: ScaleQuestion, sex?: Sex): number {
+  if (q.kind === "options") {
+    return q.options.reduce((m, o) => Math.max(m, optionPoints(o, sex)), 0);
+  }
+  return q.max;
+}
+
+/** Bloque de preguntas de una escala (secciones de la T@M, del MMSE, etc.). */
+export interface ScaleSection {
+  /** Título del bloque; null para las preguntas sin sección declarada. */
+  section: string | null;
+  questions: ScaleQuestion[];
+  /** Máximo alcanzable en el bloque (resuelto por sexo cuando aplica). */
+  max: number;
+}
+
+/**
+ * Agrupa las preguntas en bloques consecutivos por `section`, preservando el
+ * orden de la definición (y por lo tanto la numeración de la lámina). Las
+ * escalas sin secciones devuelven un único bloque con `section: null`.
+ */
+export function scaleSections(def: ScaleDefinition, sex?: Sex): ScaleSection[] {
+  const out: ScaleSection[] = [];
+  for (const q of def.questions) {
+    const section = q.section ?? null;
+    const last = out[out.length - 1];
+    if (last && last.section === section) {
+      last.questions.push(q);
+      last.max += questionMaxPoints(q, sex);
+    } else {
+      out.push({ section, questions: [q], max: questionMaxPoints(q, sex) });
+    }
+  }
+  return out;
+}
+
+/**
+ * Puntos sumados de un bloque, tolerante a ítems sin responder.
+ *
+ * OJO al presentarlo: en las escalas donde más puntaje es PEOR
+ * (`betterWhenHigher: false`, p. ej. Yesavage, Zarit, Charlson) el máximo del
+ * bloque es el peor resultado posible, así que mostrarlo como "x / max" se lee
+ * al revés. Hoy ninguna de esas escalas usa secciones; si se les agregan, hay
+ * que mostrar el subtotal sin denominador o invertir la redacción.
+ */
+export function sectionScore(
+  section: ScaleSection,
+  answers: ScaleAnswers,
+  sex?: Sex,
+): number {
+  return section.questions.reduce((t, q) => t + questionPoints(q, answers[q.id], sex), 0);
+}
+
+/**
  * Puntaje parcial (tolerante a ítems sin responder), para el cálculo en vivo
  * del formulario. Usa la misma semántica de índices que `computeScaleScore`.
  */
@@ -1070,19 +1406,7 @@ export function partialScaleScore(
 ): number {
   // El algoritmo (CAM) tolera respuestas faltantes (las trata como ausentes).
   if (def.computeScore) return def.computeScore(answers, ctx);
-  let total = 0;
-  for (const q of def.questions) {
-    const raw = answers[q.id];
-    if (raw === undefined || raw === null || Number.isNaN(Number(raw))) continue;
-    const value = Number(raw);
-    if (q.kind === "options") {
-      const opt = Number.isInteger(value) ? q.options[value] : undefined;
-      if (opt) total += optionPoints(opt, ctx?.sex);
-    } else {
-      total += value;
-    }
-  }
-  return total;
+  return def.questions.reduce((t, q) => t + questionPoints(q, answers[q.id], ctx?.sex), 0);
 }
 
 // ─── Tipos de salida ────────────────────────────────────────────────────────
