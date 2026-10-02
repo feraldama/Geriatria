@@ -15,9 +15,16 @@ import {
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
+import { assertNotProduction } from "./seed-guard.js";
+
 const prisma = new PrismaClient();
 
 async function main() {
+  // En producción no se siembra más: la base ya está inicializada y este seed
+  // BORRA los permisos de los roles base para volver a cargarlos, pisando lo
+  // que se haya ajustado desde la pantalla de roles. Además, en el servidor los
+  // archivos de seed ni siquiera se despliegan (scripts/desplegar-vps.sh).
+  assertNotProduction();
   console.log("🌱 Sembrando permisos, roles y admin inicial...");
 
   // 1) Permisos del catálogo.
